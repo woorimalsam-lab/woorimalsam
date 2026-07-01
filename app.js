@@ -1459,35 +1459,41 @@ function renderStudents() {
   `).join("");
 }
 
-// NEIS 명렬표 파싱
-function parseNEISFile(content) {
-  const lines = content.split('\n').filter(l => l.trim());
-  if (lines.length < 2) return { success: false, msg: "파일이 비어있습니다" };
+// NEIS 명렬표 파싱 (CSV/Excel)
+function parseNEISData(data) {
+  // data는 배열의 배열 [[헤더...], [행1...], [행2...], ...]
+  if (!Array.isArray(data) || data.length < 2) return { success: false, msg: "파일이 비어있습니다" };
 
-  const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const header = data[0].map(h => String(h || "").trim().toLowerCase());
 
   // 헤더 컬럼 감지
   let classIdx = -1, numberIdx = -1, nameIdx = -1, gradeIdx = -1;
   for (let i = 0; i < header.length; i++) {
     const h = header[i];
     if (h.includes('반') || h === 'class' || h === 'classroom') classIdx = i;
-    if (h.includes('번호') || h === 'number' || h === 'no') numberIdx = i;
-    if (h.includes('이름') || h === 'name') nameIdx = i;
-    if (h.includes('학년') || h === 'grade') gradeIdx = i;
+    if (h.includes('번호') || h === 'number' || h === 'no' || h === '번') numberIdx = i;
+    if (h.includes('이름') || h === 'name' || h === '이름') nameIdx = i;
+    if (h.includes('학년') || h === 'grade' || h === '학년') gradeIdx = i;
   }
+
+  // 컬럼을 찾지 못했으면 위치로 추측
+  if (nameIdx === -1 && header.length > 0) nameIdx = header.length - 1;  // 마지막 컬럼을 이름으로
+  if (classIdx === -1 && header.length > 1) classIdx = 0;               // 첫 번째를 반으로
+  if (numberIdx === -1 && header.length > 2) numberIdx = 1;             // 두 번째를 번호로
 
   if (nameIdx === -1) return { success: false, msg: "이름 컬럼을 찾을 수 없습니다" };
 
-  const students = [];
   let added = 0;
 
-  for (let i = 1; i < lines.length; i++) {
-    const row = lines[i].split(',').map(c => c.trim());
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i].map(c => String(c || "").trim());
     if (row.length <= nameIdx || !row[nameIdx]) continue;
 
     const name = row[nameIdx];
-    const klass = classIdx >= 0 && row[classIdx] ? row[classIdx].replace(/반|^0/, '') : "";
-    const number = numberIdx >= 0 && row[numberIdx] ? row[numberIdx].replace(/^0/, '') : "";
+    if (!name) continue;
+
+    const klass = classIdx >= 0 && row[classIdx] ? String(row[classIdx]).replace(/반|^0/, '') : "";
+    const number = numberIdx >= 0 && row[numberIdx] ? String(row[numberIdx]).replace(/^0/, '') : "";
 
     // 중복 체크
     if (state.students.find(s => s.name === name && s.class === klass && s.number === number)) continue;
@@ -1505,6 +1511,15 @@ function parseNEISFile(content) {
 
   saveStudents();
   return { success: true, added, msg: `${added}명의 학생이 추가되었습니다` };
+}
+
+function parseNEISFile(content) {
+  // CSV 파싱
+  const lines = content.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { success: false, msg: "파일이 비어있습니다" };
+
+  const data = lines.map(line => line.split(',').map(c => c.trim()));
+  return parseNEISData(data);
 }
 
 // ============================================================
@@ -1716,14 +1731,34 @@ function bindEventsNew() {
   $("add-student-btn")?.addEventListener("click", addStudent);
   $("student-name")?.addEventListener("keydown", (e) => { if (e.key === "Enter") addStudent(); });
 
-  // 학생 - NEIS 파일 업로드
+  // 학생 - NEIS 파일 업로드 (CSV / Excel)
   $("neis-import-btn")?.addEventListener("click", () => {
     const file = $("neis-file")?.files?.[0];
     if (!file) { toast("파일을 선택해 주세요"); return; }
+
+    const resultDiv = $("import-result");
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
     const reader = new FileReader();
     reader.onload = (e) => {
-      const result = parseNEISFile(e.target.result);
-      const resultDiv = $("import-result");
+      let result;
+      try {
+        if (isExcel) {
+          // Excel 파일 파싱
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          result = parseNEISData(rows);
+        } else {
+          // CSV 파일 파싱
+          result = parseNEISFile(e.target.result);
+        }
+      } catch (err) {
+        result = { success: false, msg: `파일 읽기 오류: ${err.message}` };
+      }
+
       if (resultDiv) {
         resultDiv.classList.remove("hidden", "success", "error");
         resultDiv.classList.add(result.success ? "success" : "error");
@@ -1734,7 +1769,12 @@ function bindEventsNew() {
         setTimeout(() => { $("neis-file").value = ""; resultDiv.classList.add("hidden"); }, 2000);
       }
     };
-    reader.readAsText(file);
+
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   });
 
   // 설정
