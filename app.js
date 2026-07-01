@@ -43,6 +43,7 @@ const MEMO_COLORS = ["default", "red", "orange", "yellow", "green", "teal", "blu
 
 // Firebase 핸들 (설정된 경우에만 채워짐)
 let fb = null;
+let migrationChecked = false;  // 로그인 세션당 로컬→클라우드 업로드 제안 1회
 
 // ============================================================
 //  유틸
@@ -264,19 +265,22 @@ function makeCell(dateObj, otherMonth, map, today) {
   if (!otherMonth) {
     const evs = map[dateStr] || [];
     if (evs.length) {
-      const dotRow = document.createElement("div");
-      dotRow.className = "cal-dot-row";
-      evs.slice(0, 4).forEach((ev) => {
-        const dot = document.createElement("span");
-        dot.className = "cal-dot";
-        dot.style.background = catColor(ev);
-        dotRow.appendChild(dot);
+      const wrap = document.createElement("div");
+      wrap.className = "cal-ev-wrap";
+      const MAX = 3;
+      evs.slice(0, MAX).forEach((ev) => {
+        const bar = document.createElement("div");
+        bar.className = "cal-ev";
+        bar.style.background = catColor(ev);
+        bar.textContent = (ev.allDay || !ev.start) ? ev.title : `${ev.start} ${ev.title}`;
+        bar.title = ev.title;
+        wrap.appendChild(bar);
       });
-      cell.appendChild(dotRow);
-      if (evs.length > 4) {
+      cell.appendChild(wrap);
+      if (evs.length > MAX) {
         const more = document.createElement("div");
         more.className = "cal-more";
-        more.textContent = `+${evs.length - 4}`;
+        more.textContent = `+${evs.length - MAX}개 더`;
         cell.appendChild(more);
       }
     }
@@ -747,7 +751,7 @@ async function initFirebase() {
   const db = fsMod.getFirestore(app);
   fb = { app, auth, db, authMod, fs: fsMod };
 
-  authMod.onAuthStateChanged(auth, (user) => {
+  authMod.onAuthStateChanged(auth, async (user) => {
     state.user = user || null;
     updateAccountUI();
     if (user) {
@@ -755,9 +759,15 @@ async function initFirebase() {
       subscribeMemos();
       subscribeEvents();
       refreshEvents();
+      // 로그인/세션복원 어느 경우든, 이 기기의 로컬 데이터가 있으면 1회 업로드 제안
+      if (!migrationChecked) {
+        migrationChecked = true;
+        await maybeMigrateLocal(user);
+      }
     } else {
       state.synced = false;
       state.allEvents = [];
+      migrationChecked = false;
       if (memoUnsub) { memoUnsub(); memoUnsub = null; }
       if (eventsUnsub) { eventsUnsub(); eventsUnsub = null; }
       subscribeMemos();   // 로컬 메모로 폴백
@@ -765,10 +775,10 @@ async function initFirebase() {
     }
   });
 
-  // 리디렉션 로그인으로 돌아온 경우 처리
+  // 리디렉션 로그인으로 돌아온 경우 환영 메시지
   try {
     const redirectResult = await authMod.getRedirectResult(auth);
-    if (redirectResult && redirectResult.user) await afterSignIn(redirectResult);
+    if (redirectResult && redirectResult.user) afterSignIn(redirectResult);
   } catch (e) {
     console.error("리디렉션 결과 오류", e);
     toast(authErrorMessage(e), 7000);
@@ -792,16 +802,9 @@ function authErrorMessage(e) {
   return code ? `${friendly}  [${code}]` : friendly;
 }
 
-// 로그인 성공 후 공통 처리 (팝업/리디렉션 공용)
-async function afterSignIn(result) {
-  state.synced = true;
-  state.user = result.user;
+// 로그인 성공 환영 메시지 (데이터 로딩/마이그레이션은 onAuthStateChanged에서 처리)
+function afterSignIn(result) {
   toast(`${result.user.displayName || "사용자"}님 로그인 완료`);
-  updateAccountUI();
-  await maybeMigrateLocal(result.user);
-  subscribeMemos();
-  subscribeEvents();
-  await refreshEvents();
 }
 
 async function login() {

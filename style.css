@@ -151,15 +151,16 @@ body {
 
 .calendar-grid { gap: 4px; }
 .cal-cell {
-  min-height: 62px;
+  min-height: 84px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 6px;
+  padding: 5px;
   cursor: pointer;
   background: #fff;
   display: flex;
   flex-direction: column;
   gap: 3px;
+  overflow: hidden;
   transition: background 0.1s ease, border 0.1s ease;
 }
 .cal-cell:hover { background: var(--accent-soft); }
@@ -170,12 +171,25 @@ body {
 .cal-date { font-size: 0.82rem; font-weight: 600; }
 .cal-cell.sun .cal-date { color: var(--sun); }
 .cal-cell.sat .cal-date { color: var(--sat); }
-.cal-dot-row { display: flex; flex-wrap: wrap; gap: 3px; }
-.cal-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--primary);
+/* 셀 안에 일정 제목 표시 (점 대신) */
+.cal-ev-wrap { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.cal-ev {
+  font-size: 0.64rem;
+  line-height: 1.35;
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.cal-more { font-size: 0.68rem; color: var(--muted); }
+.cal-more { font-size: 0.62rem; color: var(--muted); padding-left: 3px; }
+
+/* 좁은 화면에서는 살짝 더 작게 */
+@media (max-width: 520px) {
+  .cal-ev { font-size: 0.58rem; padding: 1px 3px; }
+  .cal-cell { min-height: 76px; }
+}
 
 /* ---------- Day detail ---------- */
 .day-detail {
