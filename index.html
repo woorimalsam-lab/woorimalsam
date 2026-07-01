@@ -82,21 +82,12 @@
           <button id="edit-timetable-btn" class="btn btn-primary btn-sm">편집</button>
         </div>
 
-        <div class="timetable-student-select">
-          <label>학생 선택:
-            <select id="tt-student-select">
-              <option value="">-- 학생을 선택하세요 --</option>
-            </select>
-          </label>
-        </div>
-
         <div id="timetable-display" class="timetable-display"></div>
 
         <div id="timetable-editor" class="timetable-editor hidden">
           <div class="tt-controls">
-            <label>학생: <select id="tt-edit-student"></select></label>
-            <label>교시 수: <input id="tt-periods" type="number" value="7" min="1" max="8" /></label>
-            <button id="tt-generate-btn" class="btn btn-ghost btn-sm">시간표 생성</button>
+            <label>교시 수: <input id="tt-periods" type="number" value="7" min="1" max="10" /></label>
+            <span class="spacer"></span>
             <button id="save-timetable-btn" class="btn btn-primary">저장</button>
             <button id="cancel-timetable-btn" class="btn btn-ghost">취소</button>
           </div>
@@ -246,7 +237,7 @@
 
         <div class="tool-card">
           <h3>⏲️ 스톱워치</h3>
-          <div class="stopwatch-display" id="stopwatch-display">00:00</div>
+          <div class="stopwatch-display" id="stopwatch-display">00:00.0</div>
           <div class="stopwatch-controls">
             <button id="stopwatch-start-btn" class="btn btn-primary btn-sm">시작</button>
             <button id="stopwatch-stop-btn" class="btn btn-ghost btn-sm hidden">중지</button>
@@ -285,9 +276,9 @@
           <h3>✂️ 가위바위보</h3>
           <div class="rps-display" id="rps-display">?</div>
           <div class="rps-controls">
+            <button class="btn btn-sm" data-rps="scissors">✌️ 가위</button>
             <button class="btn btn-sm" data-rps="rock">✊ 바위</button>
             <button class="btn btn-sm" data-rps="paper">✋ 보</button>
-            <button class="btn btn-sm" data-rps="scissors">✌️ 보</button>
           </div>
         </div>
       </div>

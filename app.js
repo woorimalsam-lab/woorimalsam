@@ -1028,11 +1028,15 @@ function renderTodayEvents() {
 function renderDashboard() {
   const now = new Date();
   const wd = ["일", "월", "화", "수", "목", "금", "토"][now.getDay()];
-  const name = state.user?.displayName ? state.user.displayName.split(" ")[0] : "";
-  $("greeting").textContent = name ? `안녕하세요, ${name}님 👋` : "안녕하세요 👋";
+  const teacher = state.settings?.teacher?.trim();
+  const name = teacher || (state.user?.displayName ? state.user.displayName.split(" ")[0] : "");
+  $("greeting").textContent = name
+    ? `안녕하세요, ${name} 선생님 👋`
+    : "안녕하세요, 선생님 👋";
   $("greeting-date").textContent = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${wd})`;
   renderDday();
   renderTodayEvents();
+  renderTodayTimetable();
   renderTodos();
 }
 
@@ -1261,122 +1265,168 @@ function bindEvents() {
 }
 
 // ============================================================
-//  시간표 (학생별)
+//  시간표 (교사 본인 시간표 — 쌤핀 방식)
 // ============================================================
-const LOCAL_STUDENT_TIMETABLES_KEY = "myplanner.studentTimetables";
+const TT_DAY_KEYS = ["mon", "tue", "wed", "thu", "fri"];
+const TT_DAY_LABELS = ["월", "화", "수", "목", "금"];
+const PERIOD_MINUTES = 50;   // 한 교시 수업 시간
 
-function loadTimetables() {
-  state.studentTimetables = loadLocal(LOCAL_STUDENT_TIMETABLES_KEY) || {};
+// 기본 시간표 (올려주신 시간표 이미지 기준 — 편집에서 자유롭게 수정)
+const DEFAULT_TIMETABLE = {
+  times: ["09:10", "10:10", "11:10", "12:10", "14:00", "15:00", "16:00"],
+  cells: {
+    mon: ["208 화언", "",         "206 화언", "207 화언", "",         "",         ""],
+    tue: ["",         "206 화언", "",         "",         "207 화언", "209 화언", ""],
+    wed: ["206 화언", "209 화언", "",         "208 화언", "",         "",         ""],
+    thu: ["",         "208 화언", "207 화언", "",         "",         "209 화언", ""],
+    fri: ["208 화언", "206 화언", "",         "207 화언", "",         "",         "209 화언"],
+  },
+};
+
+function loadTimetable() {
+  const t = loadLocal(LOCAL_TIMETABLE_KEY);
+  // loadLocal은 빈 값일 때 []를 반환 → 객체 형태 검증 필수
+  if (t && !Array.isArray(t) && Array.isArray(t.times) && t.cells) {
+    state.timetable = t;
+  } else {
+    state.timetable = JSON.parse(JSON.stringify(DEFAULT_TIMETABLE));
+  }
 }
-function saveTimetables() {
-  saveLocal(LOCAL_STUDENT_TIMETABLES_KEY, state.studentTimetables);
+function saveTimetable() {
+  saveLocal(LOCAL_TIMETABLE_KEY, state.timetable);
 }
+
+// "09:10" → 분 단위 숫자
+function timeToMin(t) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec((t || "").trim());
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+// 지금 진행 중인 교시 index (없으면 -1)
+function currentPeriodIndex() {
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  return state.timetable.times.findIndex((t) => {
+    const start = timeToMin(t);
+    return start !== null && nowMin >= start && nowMin < start + PERIOD_MINUTES;
+  });
+}
+function todayDayKey() {
+  const idx = new Date().getDay() - 1;   // 월=0 … 금=4
+  return idx >= 0 && idx < 5 ? TT_DAY_KEYS[idx] : null;
+}
+
 function renderTimetable() {
   const display = $("timetable-display");
   if (!display) return;
-
-  // 학생 선택 드롭다운 업데이트
-  const select = $("tt-student-select");
-  if (select) {
-    const currentVal = select.value;
-    select.innerHTML = '<option value="">-- 학생을 선택하세요 --</option>';
-    state.students.forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = s.id;
-      opt.textContent = `${s.class ? s.class + '반 ' + s.number + '번 ' : ''}${s.name}`;
-      select.appendChild(opt);
-    });
-    select.value = currentVal;
-  }
-
-  // 선택된 학생의 시간표 표시
-  const studentId = $("tt-student-select")?.value;
-  if (!studentId) {
-    display.innerHTML = '<p style="text-align: center; color: var(--muted); padding: 30px;">학생을 선택해 주세요</p>';
-    return;
-  }
-
-  const tt = state.studentTimetables[studentId] || { mon: [], tue: [], wed: [], thu: [], fri: [] };
-  const days = ["월", "화", "수", "목", "금"];
-  const dayKeys = ["mon", "tue", "wed", "thu", "fri"];
+  const tt = state.timetable;
+  const todayKey = todayDayKey();
+  const nowP = currentPeriodIndex();
 
   let html = '<table class="timetable-grid"><thead><tr><th>교시</th>';
-  days.forEach(d => html += `<th>${d}</th>`);
-  html += '</tr></thead><tbody>';
+  TT_DAY_KEYS.forEach((k, i) => {
+    html += `<th class="${k === todayKey ? "tt-today" : ""}">${TT_DAY_LABELS[i]}</th>`;
+  });
+  html += "</tr></thead><tbody>";
 
-  const maxPeriods = Math.max(...dayKeys.map(k => tt[k]?.length || 0), 7);
-  for (let p = 0; p < maxPeriods; p++) {
-    html += `<tr><td>${p + 1}</td>`;
-    dayKeys.forEach(k => {
-      const subj = tt[k]?.[p] || "";
-      html += `<td>${subj}</td>`;
+  tt.times.forEach((time, p) => {
+    html += `<tr><td>${p + 1}<span class="tt-time">${time}</span></td>`;
+    TT_DAY_KEYS.forEach((k) => {
+      const subj = tt.cells[k]?.[p] || "";
+      const isNow = k === todayKey && p === nowP && subj;
+      html += `<td class="${isNow ? "tt-now" : ""}">${subj}${isNow ? '<span class="tt-now-badge">지금</span>' : ""}</td>`;
     });
-    html += '</tr>';
-  }
-  html += '</tbody></table>';
+    html += "</tr>";
+  });
+  html += "</tbody></table>";
   display.innerHTML = html;
 
-  // 대시보드의 오늘 시간표 업데이트
-  const todayIdx = new Date().getDay() - 1;
-  if (todayIdx >= 0 && todayIdx < 5) {
-    const todayTt = $("today-timetable");
-    if (todayTt) {
-      const today = tt[dayKeys[todayIdx]] || [];
-      if (today.length) {
-        todayTt.innerHTML = today.map((s, i) => `<div class="today-timetable-item">${i + 1}교시: ${s}</div>`).join("");
-      } else {
-        todayTt.innerHTML = '<div class="today-timetable-empty">오늘 수업이 없습니다</div>';
-      }
-    }
+  renderTodayTimetable();
+}
+
+// 대시보드 카드: 오늘 수업만 추려서 표시 + 현재 교시 강조
+function renderTodayTimetable() {
+  const box = $("today-timetable");
+  if (!box) return;
+  const todayKey = todayDayKey();
+  if (!todayKey) {
+    box.innerHTML = '<div class="today-timetable-empty">주말입니다 🎉</div>';
+    return;
   }
+  const nowP = currentPeriodIndex();
+  const items = [];
+  state.timetable.times.forEach((time, p) => {
+    const subj = state.timetable.cells[todayKey]?.[p];
+    if (!subj) return;
+    const isNow = p === nowP;
+    items.push(
+      `<div class="today-timetable-item${isNow ? " now" : ""}">` +
+      `<b>${p + 1}교시</b> <span class="tt-time">${time}</span> ${subj}` +
+      `${isNow ? '<span class="tt-now-badge">지금</span>' : ""}</div>`
+    );
+  });
+  box.innerHTML = items.length
+    ? items.join("")
+    : '<div class="today-timetable-empty">오늘은 수업이 없습니다</div>';
 }
 
 function renderTimetableEditor() {
   const grid = $("timetable-grid");
-  const editSelect = $("tt-edit-student");
-  if (!grid || !editSelect) return;
+  if (!grid) return;
+  const tt = state.timetable;
+  const periods = Math.min(Math.max(parseInt($("tt-periods").value) || tt.times.length, 1), 10);
 
-  // 편집용 학생 선택 드롭다운
-  editSelect.innerHTML = '<option value="">-- 학생을 선택하세요 --</option>';
-  state.students.forEach(s => {
-    const opt = document.createElement("option");
-    opt.value = s.id;
-    opt.textContent = `${s.class ? s.class + '반 ' + s.number + '번 ' : ''}${s.name}`;
-    editSelect.appendChild(opt);
-  });
-
-  const studentId = editSelect.value;
-  if (!studentId) {
-    grid.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 30px; color: var(--muted);">학생을 선택해 주세요</td></tr>';
-    return;
-  }
-
-  const tt = state.studentTimetables[studentId] || { mon: [], tue: [], wed: [], thu: [], fri: [] };
-  const periods = parseInt($("tt-periods").value) || 7;
-  const days = ["mon", "tue", "wed", "thu", "fri"];
-  const dayLabels = ["월", "화", "수", "목", "금"];
-
-  let html = '<thead><tr><th>교시</th>';
-  dayLabels.forEach(d => html += `<th>${d}</th>`);
-  html += '</tr></thead><tbody>';
+  let html = '<thead><tr><th>교시 (시작 시각)</th>';
+  TT_DAY_LABELS.forEach((d) => (html += `<th>${d}</th>`));
+  html += "</tr></thead><tbody>";
   for (let p = 0; p < periods; p++) {
-    html += `<tr><td>${p + 1}</td>`;
-    days.forEach((d, idx) => {
-      const val = tt[d]?.[p] || "";
-      html += `<td><input type="text" data-day="${d}" data-period="${p}" value="${val}" placeholder="..." /></td>`;
+    const time = tt.times[p] || "";
+    html += `<tr><td>${p + 1} <input type="text" class="tt-time-input" data-period="${p}" value="${time}" placeholder="09:10" /></td>`;
+    TT_DAY_KEYS.forEach((d) => {
+      const val = tt.cells[d]?.[p] || "";
+      html += `<td><input type="text" data-day="${d}" data-period="${p}" value="${val}" placeholder="반·과목" /></td>`;
     });
-    html += '</tr>';
+    html += "</tr>";
   }
-  html += '</tbody>';
+  html += "</tbody>";
   grid.innerHTML = html;
+}
+
+// 편집 그리드의 입력값을 state.timetable로 수집
+function collectTimetableInputs() {
+  const grid = $("timetable-grid");
+  if (!grid) return;
+  const timeInputs = grid.querySelectorAll(".tt-time-input");
+  if (!timeInputs.length) return;   // 편집 그리드가 아직 없음
+
+  const periods = timeInputs.length;
+  const times = [];
+  const cells = { mon: [], tue: [], wed: [], thu: [], fri: [] };
+  timeInputs.forEach((inp) => { times[Number(inp.dataset.period)] = inp.value.trim(); });
+  grid.querySelectorAll("input[data-day]").forEach((inp) => {
+    cells[inp.dataset.day][Number(inp.dataset.period)] = inp.value.trim();
+  });
+  // 빈 시각은 기본 패턴으로 채움
+  for (let p = 0; p < periods; p++) {
+    if (!times[p]) times[p] = DEFAULT_TIMETABLE.times[p] || "";
+    TT_DAY_KEYS.forEach((d) => { if (cells[d][p] === undefined) cells[d][p] = ""; });
+  }
+  state.timetable = { times, cells };
 }
 
 // ============================================================
 //  자리배치
 // ============================================================
+let seatPicked = null;   // 자리 바꾸기용 첫 번째 선택 좌석 {r, c}
+
 function loadSeating() {
-  state.seating = loadLocal(LOCAL_SEATING_KEY) || { rows: 6, cols: 8, grid: [] };
-  if (!state.seating.grid.length) initSeatingGrid();
+  const s = loadLocal(LOCAL_SEATING_KEY);
+  // loadLocal은 빈 값일 때 []를 반환 → 객체 형태 검증 필수
+  if (s && !Array.isArray(s) && s.rows && s.cols && Array.isArray(s.grid)) {
+    state.seating = s;
+  } else {
+    state.seating = { rows: 5, cols: 6, grid: [] };
+    initSeatingGrid();
+  }
 }
 function initSeatingGrid() {
   state.seating.grid = Array(state.seating.rows).fill(null).map(() => Array(state.seating.cols).fill(""));
@@ -1387,20 +1437,42 @@ function saveSeating() {
 function renderSeating() {
   const display = $("seating-display");
   if (!display) return;
-  const students = state.students.map(s => s.name);
-  let html = '<div class="seating-grid">';
-  let idx = 0;
-  for (let r = 0; r < state.seating.rows; r++) {
-    for (let c = 0; c < state.seating.cols; c++) {
-      const name = state.seating.grid[r]?.[c] || "";
-      html += `<div class="seating-seat" data-row="${r}" data-col="${c}">${name ? name[0] : `${r}-${c}`}</div>`;
+  const { rows, cols, grid } = state.seating;
+  let html = '<div class="seating-board">칠판</div>';
+  html += `<div class="seating-grid" style="grid-template-columns: repeat(${cols}, 1fr)">`;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const name = grid[r]?.[c] || "";
+      const sel = seatPicked && seatPicked.r === r && seatPicked.c === c;
+      html += `<div class="seating-seat${name ? "" : " empty"}${sel ? " selected" : ""}" data-row="${r}" data-col="${c}">${name || "－"}</div>`;
     }
   }
-  html += '</div>';
+  html += "</div>";
+  html += '<p class="seating-hint muted">좌석을 하나 누른 뒤 다른 좌석을 누르면 서로 자리가 바뀝니다.</p>';
   display.innerHTML = html;
 }
+// 좌석 두 개를 차례로 눌러 맞바꾸기
+function onSeatClick(r, c) {
+  if (!seatPicked) {
+    seatPicked = { r, c };
+  } else if (seatPicked.r === r && seatPicked.c === c) {
+    seatPicked = null;   // 같은 좌석 다시 누르면 선택 해제
+  } else {
+    const g = state.seating.grid;
+    [g[seatPicked.r][seatPicked.c], g[r][c]] = [g[r][c], g[seatPicked.r][seatPicked.c]];
+    seatPicked = null;
+    saveSeating();
+  }
+  renderSeating();
+}
 function randomSeating() {
-  const students = state.students.map(s => s.name).slice();
+  const students = state.students.map((s) => s.name);
+  if (!students.length) { toast("먼저 '학생' 메뉴에서 학생을 등록해 주세요"); return; }
+  const seats = state.seating.rows * state.seating.cols;
+  if (students.length > seats) {
+    toast(`좌석(${seats}석)보다 학생(${students.length}명)이 많습니다. 행/열을 늘려 주세요.`, 5000);
+    return;
+  }
   for (let i = students.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [students[i], students[j]] = [students[j], students[i]];
@@ -1412,16 +1484,18 @@ function randomSeating() {
       state.seating.grid[r][c] = students[idx++];
     }
   }
+  seatPicked = null;
   saveSeating();
   renderSeating();
-  toast(`${students.length}명 자리배치 완료`);
+  toast(`🔀 ${students.length}명 자리배치 완료`);
 }
 
 // ============================================================
 //  학생 기록
 // ============================================================
 function loadStudents() {
-  state.students = loadLocal(LOCAL_STUDENTS_KEY) || [];
+  const s = loadLocal(LOCAL_STUDENTS_KEY);
+  state.students = Array.isArray(s) ? s : [];
 }
 function saveStudents() {
   saveLocal(LOCAL_STUDENTS_KEY, state.students);
@@ -1429,34 +1503,54 @@ function saveStudents() {
 function addStudent() {
   const name = $("student-name")?.value?.trim();
   if (!name) return;
-  const id = uid();
-  state.students.push({ id, name, notes: "", date: new Date().toISOString() });
+  state.students.push({ id: uid(), name, class: "", number: "", notes: "", date: new Date().toISOString() });
   saveStudents();
   renderStudents();
   $("student-name").value = "";
 }
 function removeStudent(id) {
-  state.students = state.students.filter(s => s.id !== id);
+  state.students = state.students.filter((s) => s.id !== id);
   saveStudents();
   renderStudents();
 }
 function updateStudentNotes(id, notes) {
-  const s = state.students.find(x => x.id === id);
+  const s = state.students.find((x) => x.id === id);
   if (s) { s.notes = notes; saveStudents(); }
+}
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (ch) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 }
 function renderStudents() {
   const list = $("students-list");
   if (!list) return;
-  if (!state.students.length) { list.innerHTML = '<p style="text-align:center; color: var(--muted); padding: 20px;">학생을 추가해 주세요.</p>'; return; }
-  list.innerHTML = state.students.map(s => `
-    <div class="student-card">
+  if (!state.students.length) {
+    list.innerHTML = '<p style="text-align:center; color: var(--muted); padding: 20px;">학생을 추가하거나 NEIS 명렬표를 업로드해 주세요.</p>';
+    return;
+  }
+  // 반 → 번호 → 이름 순 정렬
+  const sorted = [...state.students].sort((a, b) =>
+    (Number(a.class) || 0) - (Number(b.class) || 0) ||
+    (Number(a.number) || 0) - (Number(b.number) || 0) ||
+    a.name.localeCompare(b.name, "ko"));
+
+  let html = `<p class="muted" style="margin: 0 0 10px;">총 ${sorted.length}명</p>`;
+  let lastClass = null;
+  for (const s of sorted) {
+    if (s.class && s.class !== lastClass) {
+      html += `<h3 class="student-class-head">${escapeHtml(s.class)}반</h3>`;
+      lastClass = s.class;
+    }
+    html += `
+    <div class="student-card" data-id="${s.id}">
       <div class="student-header">
-        <span>${s.class ? `${s.class}반 ${s.number}번` : ''} ${s.name}</span>
-        <button class="btn btn-danger btn-sm" onclick="removeStudent('${s.id}')">삭제</button>
+        <span>${s.number ? `<b class="student-num">${escapeHtml(s.number)}번</b> ` : ""}${escapeHtml(s.name)}</span>
+        <button class="btn btn-danger btn-sm student-del" data-id="${s.id}">삭제</button>
       </div>
-      <textarea placeholder="메모..." onchange="updateStudentNotes('${s.id}', this.value)" style="width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px;">${s.notes}</textarea>
-    </div>
-  `).join("");
+      <textarea class="student-note" data-id="${s.id}" placeholder="메모..." style="width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; font-family: inherit;">${escapeHtml(s.notes)}</textarea>
+    </div>`;
+  }
+  list.innerHTML = html;
 }
 
 // NEIS 명렬표 파싱 (CSV/Excel)
@@ -1526,7 +1620,9 @@ function parseNEISFile(content) {
 //  설정
 // ============================================================
 function loadSettings() {
-  state.settings = loadLocal(LOCAL_SETTINGS_KEY) || { school: "", grade: "", teacher: "" };
+  const s = loadLocal(LOCAL_SETTINGS_KEY);
+  // loadLocal은 빈 값일 때 []를 반환 → 객체 형태 검증 필수
+  state.settings = (s && !Array.isArray(s)) ? s : { school: "", grade: "", teacher: "" };
   $("setting-school").value = state.settings.school || "";
   $("setting-grade").value = state.settings.grade || "";
   $("setting-teacher").value = state.settings.teacher || "";
@@ -1538,6 +1634,7 @@ function saveSettings() {
     teacher: $("setting-teacher").value
   };
   saveLocal(LOCAL_SETTINGS_KEY, state.settings);
+  renderDashboard();   // 인사말에 즉시 반영
   toast("설정이 저장되었습니다.");
 }
 function exportData() {
@@ -1567,20 +1664,24 @@ function importData() {
 // ============================================================
 function startTimer() {
   if (state.timerInterval) return;
-  state.timerTime = parseInt($("timer-input").value) || 300;
-  state.timerInterval = setInterval(() => {
-    state.timerTime--;
-    const m = Math.floor(state.timerTime / 60), s = state.timerTime % 60;
+  const seconds = parseInt($("timer-input").value) || 300;
+  // 종료 시각 기준으로 계산 (탭이 백그라운드여도 정확)
+  const endAt = Date.now() + seconds * 1000;
+  const tick = () => {
+    const remain = Math.max(0, Math.round((endAt - Date.now()) / 1000));
+    state.timerTime = remain;
+    const m = Math.floor(remain / 60), s = remain % 60;
     $("timer-display").textContent = `${pad(m)}:${pad(s)}`;
-    if (state.timerTime <= 0) {
+    if (remain <= 0) {
       clearInterval(state.timerInterval);
       state.timerInterval = null;
-      toast("⏱️ 시간 완료!");
-      $("timer-display").textContent = "00:00";
+      toast("⏱️ 시간 완료!", 8000);
       $("timer-start-btn").classList.remove("hidden");
       $("timer-stop-btn").classList.add("hidden");
     }
-  }, 1000);
+  };
+  tick();
+  state.timerInterval = setInterval(tick, 500);
   $("timer-start-btn").classList.add("hidden");
   $("timer-stop-btn").classList.remove("hidden");
 }
@@ -1603,10 +1704,13 @@ function resetTimer() {
 // ============================================================
 function startStopwatch() {
   if (state.stopwatchInterval) return;
+  // 실제 시각 기준으로 계산 (탭이 백그라운드여도 정확)
+  const startedAt = Date.now() - state.stopwatchTime * 100;
   state.stopwatchInterval = setInterval(() => {
-    state.stopwatchTime++;
-    const m = Math.floor(state.stopwatchTime / 60), s = state.stopwatchTime % 60;
-    $("stopwatch-display").textContent = `${pad(m)}:${pad(s)}`;
+    state.stopwatchTime = Math.floor((Date.now() - startedAt) / 100);
+    const total = state.stopwatchTime;
+    const m = Math.floor(total / 600), s = Math.floor((total % 600) / 10), d = total % 10;
+    $("stopwatch-display").textContent = `${pad(m)}:${pad(s)}.${d}`;
   }, 100);
   $("stopwatch-start-btn").classList.add("hidden");
   $("stopwatch-stop-btn").classList.remove("hidden");
@@ -1622,7 +1726,7 @@ function stopStopwatch() {
 function resetStopwatch() {
   stopStopwatch();
   state.stopwatchTime = 0;
-  $("stopwatch-display").textContent = "00:00";
+  $("stopwatch-display").textContent = "00:00.0";
 }
 
 // ============================================================
@@ -1635,18 +1739,36 @@ function rollDice() {
   $("dice-display").textContent = result;
   toast(`🎲 ${count}개 주사위: 합 ${result}`);
 }
+let voteState = null;   // { options: [...], counts: [...] }
+
 function createVote() {
-  const input = $("vote-option").value.split(",").map(s => s.trim()).filter(s => s);
-  if (!input.length) { toast("선택지를 입력하세요"); return; }
-  const display = $("vote-display");
-  display.innerHTML = input.map((opt, i) => `
-    <div class="vote-option">
-      <span class="vote-option-text">${opt}</span>
-      <div class="vote-option-bar" style="width: 0%"></div>
-      <span style="min-width: 30px; text-align: right;">0명</span>
-    </div>
-  `).join("");
+  const input = $("vote-option").value.split(",").map((s) => s.trim()).filter(Boolean);
+  if (input.length < 2) { toast("선택지를 쉼표로 구분해 2개 이상 입력하세요"); return; }
+  voteState = { options: input, counts: input.map(() => 0) };
+  renderVote();
   $("vote-option").value = "";
+}
+function renderVote() {
+  const display = $("vote-display");
+  if (!display || !voteState) return;
+  const total = voteState.counts.reduce((a, b) => a + b, 0);
+  display.innerHTML =
+    voteState.options.map((opt, i) => {
+      const n = voteState.counts[i];
+      const pct = total ? Math.round((n / total) * 100) : 0;
+      return `
+      <button class="vote-option" data-vote="${i}" title="누르면 1표 추가">
+        <span class="vote-option-text">${escapeHtml(opt)}</span>
+        <span class="vote-option-track"><span class="vote-option-bar" style="width:${pct}%"></span></span>
+        <span class="vote-option-count">${n}표</span>
+      </button>`;
+    }).join("") +
+    `<div class="vote-total muted">총 ${total}표 · 선택지를 누르면 표가 올라갑니다 <button class="linkbtn" data-vote-reset>초기화</button></div>`;
+}
+function castVote(i) {
+  if (!voteState) return;
+  voteState.counts[i]++;
+  renderVote();
 }
 function pickNumber() {
   const min = parseInt($("numberpick-min").value) || 1;
@@ -1673,48 +1795,47 @@ function playRPS(choice) {
 function bindEventsNew() {
   // 시간표
   $("edit-timetable-btn")?.addEventListener("click", () => {
+    $("tt-periods").value = state.timetable.times.length;
     $("timetable-editor").classList.toggle("hidden");
     renderTimetableEditor();
   });
-  $("tt-student-select")?.addEventListener("change", renderTimetable);
-  $("tt-periods")?.addEventListener("change", renderTimetableEditor);
-  $("tt-edit-student")?.addEventListener("change", renderTimetableEditor);
-  $("tt-generate-btn")?.addEventListener("click", renderTimetableEditor);
-
+  $("tt-periods")?.addEventListener("change", () => {
+    // 교시 수를 바꾸기 전에 입력 중이던 값을 보존
+    collectTimetableInputs();
+    renderTimetableEditor();
+  });
   $("save-timetable-btn")?.addEventListener("click", () => {
-    const studentId = $("tt-edit-student").value;
-    if (!studentId) { toast("학생을 선택해 주세요"); return; }
-
-    if (!state.studentTimetables[studentId]) {
-      state.studentTimetables[studentId] = { mon: [], tue: [], wed: [], thu: [], fri: [] };
-    }
-
-    const inputs = $("timetable-grid").querySelectorAll("input");
-    inputs.forEach(inp => {
-      const day = inp.dataset.day, period = parseInt(inp.dataset.period);
-      if (!state.studentTimetables[studentId][day]) {
-        state.studentTimetables[studentId][day] = [];
-      }
-      state.studentTimetables[studentId][day][period] = inp.value;
-    });
-
+    collectTimetableInputs();
+    saveTimetable();
     $("timetable-editor").classList.add("hidden");
-    saveTimetables();
     renderTimetable();
     toast("시간표가 저장되었습니다");
   });
-  $("cancel-timetable-btn")?.addEventListener("click", () => $("timetable-editor").classList.add("hidden"));
+  $("cancel-timetable-btn")?.addEventListener("click", () => {
+    loadTimetable();   // 편집 중 변경 되돌리기
+    $("timetable-editor").classList.add("hidden");
+  });
 
   // 자리배치
   $("random-seating-btn")?.addEventListener("click", randomSeating);
-  $("edit-seating-btn")?.addEventListener("click", () => $("seating-config").classList.toggle("hidden"));
+  $("edit-seating-btn")?.addEventListener("click", () => {
+    $("seating-rows").value = state.seating.rows;
+    $("seating-cols").value = state.seating.cols;
+    document.querySelector(".seating-config")?.classList.toggle("hidden");
+  });
   $("create-seating-btn")?.addEventListener("click", () => {
-    state.seating.rows = parseInt($("seating-rows").value) || 6;
-    state.seating.cols = parseInt($("seating-cols").value) || 8;
+    state.seating.rows = Math.min(Math.max(parseInt($("seating-rows").value) || 5, 1), 10);
+    state.seating.cols = Math.min(Math.max(parseInt($("seating-cols").value) || 6, 1), 10);
     initSeatingGrid();
+    seatPicked = null;
     saveSeating();
     renderSeating();
-    $("seating-config").classList.add("hidden");
+    document.querySelector(".seating-config")?.classList.add("hidden");
+  });
+  // 좌석 클릭 → 자리 바꾸기 (이벤트 위임)
+  $("seating-display")?.addEventListener("click", (e) => {
+    const seat = e.target.closest(".seating-seat");
+    if (seat) onSeatClick(Number(seat.dataset.row), Number(seat.dataset.col));
   });
 
   // 학생 - 탭 전환
@@ -1730,6 +1851,21 @@ function bindEventsNew() {
   // 학생 - 수동 추가
   $("add-student-btn")?.addEventListener("click", addStudent);
   $("student-name")?.addEventListener("keydown", (e) => { if (e.key === "Enter") addStudent(); });
+
+  // 학생 - 삭제/메모 (이벤트 위임 — 카드가 동적으로 생성되므로)
+  $("students-list")?.addEventListener("click", (e) => {
+    const del = e.target.closest(".student-del");
+    if (!del) return;
+    const st = state.students.find((s) => s.id === del.dataset.id);
+    if (st && confirm(`'${st.name}' 학생을 삭제할까요? 메모도 함께 지워집니다.`)) {
+      removeStudent(del.dataset.id);
+    }
+  });
+  $("students-list")?.addEventListener("change", (e) => {
+    if (e.target.classList.contains("student-note")) {
+      updateStudentNotes(e.target.dataset.id, e.target.value);
+    }
+  });
 
   // 학생 - NEIS 파일 업로드 (CSV / Excel)
   $("neis-import-btn")?.addEventListener("click", () => {
@@ -1822,8 +1958,17 @@ function bindEventsNew() {
   // 도구 - 주사위
   $("dice-roll-btn")?.addEventListener("click", rollDice);
 
-  // 도구 - 투표
+  // 도구 - 투표 (선택지 클릭 = 1표, 이벤트 위임)
   $("vote-create-btn")?.addEventListener("click", createVote);
+  $("vote-option")?.addEventListener("keydown", (e) => { if (e.key === "Enter") createVote(); });
+  $("vote-display")?.addEventListener("click", (e) => {
+    if (e.target.closest("[data-vote-reset]")) {
+      if (voteState) { voteState.counts = voteState.options.map(() => 0); renderVote(); }
+      return;
+    }
+    const opt = e.target.closest("[data-vote]");
+    if (opt) castVote(Number(opt.dataset.vote));
+  });
 
   // 도구 - 번호뽑기
   $("numberpick-btn")?.addEventListener("click", pickNumber);
@@ -1842,10 +1987,16 @@ async function start() {
   updateAccountUI();
 
   // 각 기능 데이터 로드
-  loadTimetables();
+  loadTimetable();
   loadSeating();
   loadStudents();
   loadSettings();
+
+  // 현재 교시 하이라이트를 1분마다 갱신
+  setInterval(() => {
+    if (state.activeView === "home") renderTodayTimetable();
+    if (state.activeView === "timetable") renderTimetable();
+  }, 60000);
 
   if (isConfigured) {
     try {

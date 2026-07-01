@@ -789,14 +789,68 @@ body {
 [data-theme="dark"] .settings-section { border-color: #2a2e38; }
 [data-theme="dark"] .settings-section input { background: #262c3a; color: var(--ink); border-color: #2a2e38; }
 
+/* ---------- 시간표: 오늘/현재 교시 강조 ---------- */
+.tt-time { display: block; font-size: 0.68rem; font-weight: 400; color: var(--muted); }
+.timetable-grid th.tt-today { background: var(--primary); color: #fff; }
+.timetable-grid td.tt-now {
+  background: #fff3d6; font-weight: 700; position: relative;
+  box-shadow: inset 0 0 0 2px #f5b83d;
+}
+.tt-now-badge {
+  display: inline-block; margin-left: 5px; padding: 1px 6px;
+  font-size: 0.62rem; font-weight: 700; border-radius: 999px;
+  background: #f5a623; color: #fff; vertical-align: middle;
+}
+.tt-time-input { width: 56px; font-size: 0.75rem; text-align: center; border: 1px solid var(--line); border-radius: 4px; padding: 2px; background: var(--panel); color: var(--ink); }
+.today-timetable-item.now { background: #fff3d6; border-left-color: #f5a623; font-weight: 600; }
+.today-timetable-item .tt-time { display: inline; margin-right: 2px; }
+
+/* ---------- 자리배치: 칠판/좌석 ---------- */
+.seating-board {
+  text-align: center; font-weight: 700; letter-spacing: 8px;
+  background: #2e5339; color: #e8f2ea; border-radius: 8px;
+  padding: 8px; margin-bottom: 12px;
+}
+.seating-seat { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+.seating-seat.empty { color: var(--muted); border-style: dashed; }
+.seating-hint { margin: 10px 0 0; }
+
+/* ---------- 학생: 반 그룹 헤더 ---------- */
+.student-class-head {
+  margin: 14px 0 4px; font-size: 0.92rem; color: var(--primary);
+  border-bottom: 2px solid var(--accent-soft); padding-bottom: 4px;
+}
+.student-num { color: var(--primary); font-weight: 700; }
+
+/* ---------- 투표 (클릭 집계) ---------- */
+.vote-option {
+  width: 100%; font-family: inherit; font-size: 0.88rem; color: var(--ink);
+  background: var(--panel); cursor: pointer; text-align: left;
+}
+.vote-option:hover { border-color: var(--primary); background: var(--accent-soft); }
+.vote-option-track { flex: 1; height: 14px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
+.vote-option-bar { display: block; height: 100%; border-radius: 999px; background: var(--primary); transition: width 0.2s ease; }
+.vote-option-count { min-width: 40px; text-align: right; font-weight: 700; font-size: 0.82rem; }
+.vote-total { margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+
+[data-theme="dark"] .timetable-grid td.tt-now { background: #4a3a14; box-shadow: inset 0 0 0 2px #b8860b; }
+[data-theme="dark"] .today-timetable-item.now { background: #4a3a14; }
+[data-theme="dark"] .vote-option { background: #1f2430; }
+[data-theme="dark"] .vote-option:hover { background: #262c3a; }
+[data-theme="dark"] .vote-option-track { background: #2a2e38; }
+[data-theme="dark"] .tt-time-input { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .seating-seat.empty { color: #6a7183; }
+
 /* 모바일 확장 탭 */
 @media (max-width: 640px) {
   .tabbar { padding: 5px 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .navbtn { padding: 7px 12px; font-size: 0.8rem; }
   .navicon { display: none; }
   .tools-grid { grid-template-columns: 1fr; }
-  .timetable-grid th, .timetable-grid td { padding: 8px 4px; font-size: 0.75rem; }
-  .seating-grid { grid-template-columns: repeat(4, 1fr); gap: 4px; }
-  .seating-seat { padding: 4px; font-size: 0.7rem; }
+  .timetable-grid th, .timetable-grid td { padding: 8px 4px; font-size: 0.72rem; height: 48px; }
+  .tt-time { font-size: 0.6rem; }
+  .timetable-grid th:first-child, .timetable-grid td:first-child { width: 56px; }
+  .seating-seat { padding: 4px 2px; font-size: 0.68rem; min-height: 36px; }
+  .seating-board { letter-spacing: 4px; padding: 6px; }
 }
 [data-theme="dark"] .btn-icon { color: var(--ink); }
