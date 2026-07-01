@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>내 일정 · 메모</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗓️</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🗓️ 내 일정 · 메모</div>
+    <div class="account">
+      <span id="mode-badge" class="badge">로컬 저장 모드</span>
+      <span id="user-name" class="user-name"></span>
+      <button id="login-btn" class="btn btn-primary">구글 로그인</button>
+      <button id="logout-btn" class="btn btn-ghost hidden">로그아웃</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 일정(캘린더) -->
+    <section class="panel calendar-panel">
+      <div class="panel-head">
+        <div class="cal-nav">
+          <button id="prev-month" class="btn btn-icon" title="이전 달">‹</button>
+          <h2 id="cal-title">2026년 7월</h2>
+          <button id="next-month" class="btn btn-icon" title="다음 달">›</button>
+        </div>
+        <button id="today-btn" class="btn btn-ghost">오늘</button>
+      </div>
+
+      <div class="legend" id="legend">
+        <button class="chip chip-work active" data-cat="work"><span class="chip-dot"></span>업무</button>
+        <button class="chip chip-subject active" data-cat="subject"><span class="chip-dot"></span>교과</button>
+        <button class="chip chip-academic active" data-cat="academic"><span class="chip-dot"></span>학사</button>
+      </div>
+
+      <div class="weekday-row">
+        <span class="sun">일</span><span>월</span><span>화</span><span>수</span>
+        <span>목</span><span>금</span><span class="sat">토</span>
+      </div>
+      <div id="calendar-grid" class="calendar-grid"></div>
+
+      <div class="day-detail">
+        <h3 id="day-detail-title">날짜를 선택하세요</h3>
+        <ul id="event-list" class="event-list"></ul>
+        <button id="add-event-btn" class="btn btn-primary hidden">+ 일정 추가</button>
+      </div>
+    </section>
+
+    <!-- 메모 -->
+    <section class="panel memo-panel">
+      <div class="panel-head">
+        <h2>메모</h2>
+        <span id="memo-count" class="muted"></span>
+      </div>
+      <div class="memo-input">
+        <textarea id="memo-text" rows="3" placeholder="메모를 입력하고 Ctrl+Enter 또는 '추가'를 누르세요"></textarea>
+        <button id="add-memo-btn" class="btn btn-primary">추가</button>
+      </div>
+      <ul id="memo-list" class="memo-list"></ul>
+    </section>
+  </main>
+
+  <!-- 일정 추가/수정 모달 -->
+  <div id="event-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="event-modal-title">일정 추가</h3>
+      <label>분류
+        <select id="ev-category">
+          <option value="work">업무</option>
+          <option value="subject">교과</option>
+        </select>
+      </label>
+      <label>제목
+        <input id="ev-title" type="text" placeholder="예: 3학년 모의고사 분석" />
+      </label>
+      <label>날짜
+        <input id="ev-date" type="date" />
+      </label>
+      <div class="row">
+        <label>시작
+          <input id="ev-start" type="time" />
+        </label>
+        <label>종료
+          <input id="ev-end" type="time" />
+        </label>
+      </div>
+      <label class="checkbox-row">
+        <input id="ev-allday" type="checkbox" /> 하루 종일
+      </label>
+      <label>메모
+        <textarea id="ev-desc" rows="2" placeholder="세부 내용 (선택)"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button id="ev-delete" class="btn btn-danger hidden">삭제</button>
+        <span class="spacer"></span>
+        <button id="ev-cancel" class="btn btn-ghost">취소</button>
+        <button id="ev-save" class="btn btn-primary">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
