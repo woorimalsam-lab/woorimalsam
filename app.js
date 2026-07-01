@@ -1138,12 +1138,21 @@ function renderTodos() {
 // ============================================================
 function setView(name) {
   state.activeView = name;
-  for (const v of ["home", "calendar", "memo"]) {
-    $("view-" + v).classList.toggle("hidden", v !== name);
+  const allViews = ["home", "timetable", "seating", "students", "calendar", "memo", "tools", "settings"];
+  for (const v of allViews) {
+    const el = $("view-" + v);
+    if (el) el.classList.toggle("hidden", v !== name);
   }
   $("tabbar").querySelectorAll(".navbtn").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+
+  // 각 뷰별 초기화
   if (name === "home") renderDashboard();
+  if (name === "timetable") renderTimetable();
+  if (name === "seating") renderSeating();
+  if (name === "students") renderStudents();
   if (name === "calendar") { renderCalendar(); if (state.selected) renderDayDetail(); }
+  if (name === "memo") renderMemos();
+
   window.scrollTo(0, 0);
 }
 
