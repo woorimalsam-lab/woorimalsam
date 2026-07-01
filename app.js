@@ -4,9 +4,6 @@ import { academicEvents, academicMeta } from "./academic-calendar.js";
 // ============================================================
 //  전역 상태
 // ============================================================
-const TZ = "Asia/Seoul";
-const CAL_SCOPE = "https://www.googleapis.com/auth/calendar.events";
-
 // 일정 분류 정의 (표시 순서: 개인 → 업무 → 교과)
 const CATEGORIES = {
   personal: { label: "개인", color: "#8b5cf6", googleColorId: "3" },   // 보라
@@ -26,8 +23,8 @@ const state = {
   selected: null,          // 선택한 날짜 (YYYY-MM-DD)
   events: [],              // 현재 달의 일정 (정규화된 형태)
   memos: [],               // 메모 목록
+  allEvents: [],           // 클라우드 일정 전체 (로그인 시)
   user: null,              // Firebase 사용자
-  calToken: null,          // 구글 캘린더 접근 토큰
   synced: false,           // 클라우드 동기화 활성 여부
   editingEventId: null,    // 모달에서 수정 중인 일정 id
   filters: { personal: true, work: true, subject: true, academic: true }, // 레이어 표시 여부
@@ -89,18 +86,34 @@ function uid() {
   return "id-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-// ---------- 일정 ----------
+// ---------- 일정 (클라우드=Firestore / 비로그인=로컬) ----------
 async function fetchEvents(monthDate) {
-  if (state.synced && state.calToken) {
-    return fetchGoogleEvents(monthDate);
-  }
-  // 로컬: 해당 달의 일정만 필터
   const prefix = `${monthDate.getFullYear()}-${pad(monthDate.getMonth() + 1)}`;
+  if (state.synced && fb) {
+    return state.allEvents.filter((e) => (e.date || "").startsWith(prefix));
+  }
   return loadLocal(LOCAL_EVENTS_KEY).filter((e) => e.date.startsWith(prefix));
 }
 
 async function saveEvent(ev) {
-  if (state.synced && state.calToken) return saveGoogleEvent(ev);
+  if (state.synced && fb) {
+    const { addDoc, updateDoc, doc, collection } = fb.fs;
+    const data = {
+      title: ev.title,
+      date: ev.date,
+      allDay: !!ev.allDay,
+      start: ev.start || null,
+      end: ev.end || null,
+      desc: ev.desc || "",
+      category: ev.category || "work",
+    };
+    if (ev.id) {
+      await updateDoc(doc(fb.db, "users", state.user.uid, "events", ev.id), data);
+    } else {
+      await addDoc(collection(fb.db, "users", state.user.uid, "events"), data);
+    }
+    return;
+  }
   const all = loadLocal(LOCAL_EVENTS_KEY);
   if (ev.id) {
     const i = all.findIndex((e) => e.id === ev.id);
@@ -113,93 +126,42 @@ async function saveEvent(ev) {
 }
 
 async function deleteEvent(ev) {
-  if (state.synced && state.calToken) return deleteGoogleEvent(ev);
+  if (state.synced && fb) {
+    const { deleteDoc, doc } = fb.fs;
+    await deleteDoc(doc(fb.db, "users", state.user.uid, "events", ev.id));
+    return;
+  }
   const all = loadLocal(LOCAL_EVENTS_KEY).filter((e) => e.id !== ev.id);
   saveLocal(LOCAL_EVENTS_KEY, all);
+}
+
+// 클라우드 일정 실시간 구독
+let eventsUnsub = null;
+function subscribeEvents() {
+  if (!(state.synced && fb)) return;
+  const { collection, onSnapshot } = fb.fs;
+  if (eventsUnsub) eventsUnsub();
+  eventsUnsub = onSnapshot(collection(fb.db, "users", state.user.uid, "events"), (snap) => {
+    state.allEvents = snap.docs.map((d) => {
+      const x = d.data();
+      return {
+        id: d.id,
+        title: x.title,
+        date: x.date,
+        allDay: !!x.allDay,
+        start: x.start || null,
+        end: x.end || null,
+        desc: x.desc || "",
+        category: x.category || "work",
+      };
+    });
+    refreshEvents();
+  });
 }
 
 // ---------- 메모 (로컬 모드) ----------
 function loadLocalMemos() {
   return loadLocal(LOCAL_MEMOS_KEY).sort((a, b) => b.createdAt - a.createdAt);
-}
-
-// ============================================================
-//  구글 캘린더 API
-// ============================================================
-async function calApi(path, options = {}) {
-  const res = await fetch(`https://www.googleapis.com/calendar/v3${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${state.calToken}`,
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-  });
-  if (res.status === 401) {
-    state.calToken = null;
-    toast("구글 인증이 만료되었습니다. 다시 로그인해 주세요.");
-    throw new Error("calendar-auth-expired");
-  }
-  if (!res.ok) throw new Error(`calendar-api ${res.status}`);
-  return res.status === 204 ? null : res.json();
-}
-
-function monthRange(d) {
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-  return { timeMin: start.toISOString(), timeMax: end.toISOString() };
-}
-
-async function fetchGoogleEvents(monthDate) {
-  const { timeMin, timeMax } = monthRange(monthDate);
-  const params = new URLSearchParams({
-    timeMin, timeMax, singleEvents: "true", orderBy: "startTime", maxResults: "250",
-  });
-  const data = await calApi(`/calendars/primary/events?${params}`);
-  return (data.items || []).map(normalizeGoogleEvent);
-}
-
-function normalizeGoogleEvent(g) {
-  const allDay = !!g.start.date;
-  const date = allDay ? g.start.date : g.start.dateTime.slice(0, 10);
-  const start = allDay ? null : g.start.dateTime.slice(11, 16);
-  const end = allDay ? null : (g.end.dateTime ? g.end.dateTime.slice(11, 16) : null);
-  const category = g.extendedProperties?.private?.category || "work";
-  return { id: g.id, title: g.summary || "(제목 없음)", date, start, end, allDay, desc: g.description || "", category };
-}
-
-function toGoogleBody(ev) {
-  const category = CATEGORIES[ev.category] ? ev.category : "work";
-  const body = {
-    summary: ev.title,
-    description: ev.desc || "",
-    colorId: CATEGORIES[category].googleColorId,
-    extendedProperties: { private: { category } },
-  };
-  if (ev.allDay || !ev.start) {
-    const [y, m, d] = ev.date.split("-").map(Number);
-    const next = new Date(y, m - 1, d + 1);
-    body.start = { date: ev.date };
-    body.end = { date: ymd(next) };
-  } else {
-    body.start = { dateTime: `${ev.date}T${ev.start}:00`, timeZone: TZ };
-    const endT = ev.end && ev.end > ev.start ? ev.end : ev.start;
-    body.end = { dateTime: `${ev.date}T${endT}:00`, timeZone: TZ };
-  }
-  return body;
-}
-
-async function saveGoogleEvent(ev) {
-  const body = toGoogleBody(ev);
-  if (ev.id) {
-    await calApi(`/calendars/primary/events/${ev.id}`, { method: "PATCH", body: JSON.stringify(body) });
-  } else {
-    await calApi(`/calendars/primary/events`, { method: "POST", body: JSON.stringify(body) });
-  }
-}
-
-async function deleteGoogleEvent(ev) {
-  await calApi(`/calendars/primary/events/${ev.id}`, { method: "DELETE" });
 }
 
 // ============================================================
@@ -210,7 +172,7 @@ async function refreshEvents() {
     state.events = await fetchEvents(state.view);
   } catch (e) {
     state.events = [];
-    if (e.message !== "calendar-auth-expired") toast("일정을 불러오지 못했습니다.");
+    console.error("일정 로드 오류", e);
   }
   renderCalendar();
   if (state.selected) renderDayDetail();
@@ -432,10 +394,11 @@ async function onSaveEvent() {
     closeEventModal();
     state.selected = date;
     state.view = new Date(date + "T00:00:00");
-    toast(state.synced ? "구글 캘린더에 저장했습니다." : "일정을 저장했습니다.");
+    toast("일정을 저장했습니다.");
     await refreshEvents();
   } catch (e) {
-    if (e.message !== "calendar-auth-expired") toast("저장에 실패했습니다.");
+    console.error("일정 저장 오류", e);
+    toast("저장에 실패했습니다.");
   }
 }
 
@@ -448,7 +411,8 @@ async function onDeleteEvent() {
     toast("일정을 삭제했습니다.");
     await refreshEvents();
   } catch (e) {
-    if (e.message !== "calendar-auth-expired") toast("삭제에 실패했습니다.");
+    console.error("일정 삭제 오류", e);
+    toast("삭제에 실패했습니다.");
   }
 }
 
@@ -789,11 +753,13 @@ async function initFirebase() {
     if (user) {
       state.synced = true;
       subscribeMemos();
+      subscribeEvents();
       refreshEvents();
     } else {
       state.synced = false;
-      state.calToken = null;
+      state.allEvents = [];
       if (memoUnsub) { memoUnsub(); memoUnsub = null; }
+      if (eventsUnsub) { eventsUnsub(); eventsUnsub = null; }
       subscribeMemos();   // 로컬 메모로 폴백
       refreshEvents();
     }
@@ -828,15 +794,13 @@ function authErrorMessage(e) {
 
 // 로그인 성공 후 공통 처리 (팝업/리디렉션 공용)
 async function afterSignIn(result) {
-  const { GoogleAuthProvider } = fb.authMod;
-  const cred = GoogleAuthProvider.credentialFromResult(result);
-  state.calToken = cred?.accessToken || null;
   state.synced = true;
   state.user = result.user;
   toast(`${result.user.displayName || "사용자"}님 로그인 완료`);
   updateAccountUI();
   await maybeMigrateLocal(result.user);
   subscribeMemos();
+  subscribeEvents();
   await refreshEvents();
 }
 
@@ -844,8 +808,7 @@ async function login() {
   if (!fb) return;
   const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = fb.authMod;
   const provider = new GoogleAuthProvider();
-  provider.addScope(CAL_SCOPE);
-  provider.setCustomParameters({ prompt: "consent" });
+  // 구글 캘린더 등 민감한 권한은 요청하지 않음(→ '확인되지 않은 앱' 경고 없음)
   try {
     const result = await signInWithPopup(fb.auth, provider);
     await afterSignIn(result);
@@ -898,17 +861,15 @@ async function maybeMigrateLocal(user) {
     } catch (e) { console.error("메모 업로드 실패", e); }
   }
 
-  // 일정 → 구글 캘린더 (로그인 직후라 토큰 있음)
-  if (state.calToken) {
-    for (const ev of localEvents) {
-      try { await saveGoogleEvent({ ...ev, id: null }); evOk++; }
-      catch (e) { console.error("일정 업로드 실패", e); }
-    }
+  // 일정 → Firestore
+  for (const ev of localEvents) {
+    try { await saveEvent({ ...ev, id: null }); evOk++; }
+    catch (e) { console.error("일정 업로드 실패", e); }
   }
 
   // 성공적으로 올라간 만큼 로컬에서 정리(중복 방지)
   if (memoOk === localMemos.length) saveLocal(LOCAL_MEMOS_KEY, []);
-  if (state.calToken && evOk === localEvents.length) saveLocal(LOCAL_EVENTS_KEY, []);
+  if (evOk === localEvents.length) saveLocal(LOCAL_EVENTS_KEY, []);
 
   toast(`클라우드로 올렸습니다 (메모 ${memoOk}개, 일정 ${evOk}개)`);
 }
