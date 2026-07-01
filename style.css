@@ -84,6 +84,42 @@ body {
   .layout { grid-template-columns: 1fr; }
 }
 
+/* ---------- 모바일 최적화 ---------- */
+@media (max-width: 640px) {
+  /* 상단바: 한 줄로 압축 */
+  .topbar { padding: 10px 12px; gap: 8px; }
+  .brand { font-size: 1rem; white-space: nowrap; }
+  .account { gap: 6px; }
+  .user-name { display: none; }               /* 이름은 숨겨 공간 확보 */
+  .badge { font-size: 0.65rem; padding: 2px 7px; }
+  .topbar .btn { padding: 7px 10px; font-size: 0.82rem; }
+  #theme-btn.btn-icon { padding: 4px 8px; }
+
+  /* 여백 축소로 화면 폭 확보 */
+  .layout { padding: 10px; gap: 12px; }
+  .panel { padding: 12px; border-radius: 12px; }
+  .panel-head { margin-bottom: 10px; }
+
+  /* 달력 */
+  .cal-nav h2 { min-width: 92px; font-size: 1rem; }
+  .cal-nav .btn-icon { padding: 4px 8px; }
+  .calendar-grid { gap: 3px; }
+  .cal-cell { min-height: 66px; padding: 3px; border-radius: 8px; gap: 2px; }
+  .cal-date { font-size: 0.76rem; }
+  .weekday-row span { font-size: 0.72rem; }
+  .cal-ev { font-size: 0.56rem; padding: 1px 3px; border-radius: 3px; }
+  .cal-more { font-size: 0.56rem; }
+
+  /* 메모 작성 도구 줄바꿈 허용 */
+  .memo-compose-tools { flex-wrap: wrap; gap: 8px; }
+  .memo-cat-select { flex: 1; max-width: none; }
+
+  /* 일정 상세/모달 */
+  .event-item { padding: 9px 10px; }
+  .modal { padding: 12px; }
+  .modal-card { padding: 18px; }
+}
+
 .panel {
   background: var(--panel);
   border-radius: var(--radius);
