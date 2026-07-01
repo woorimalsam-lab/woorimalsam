@@ -55,14 +55,24 @@
         <h2>메모</h2>
         <span id="memo-count" class="muted"></span>
       </div>
-      <div class="memo-input">
-        <div class="memo-cat-row">
-          <select id="memo-category" class="memo-cat-select" title="메모를 넣을 항목"></select>
-          <button id="add-memo-cat" class="btn btn-ghost btn-sm" title="새 항목 만들기">＋ 항목</button>
-        </div>
-        <textarea id="memo-text" rows="3" placeholder="메모를 입력하고 Ctrl+Enter 또는 '추가'를 누르세요"></textarea>
-        <button id="add-memo-btn" class="btn btn-primary">추가</button>
+
+      <div class="memo-search-wrap">
+        <span class="memo-search-icon">🔍</span>
+        <input id="memo-search" class="memo-search" type="text" placeholder="메모 검색" />
+        <button id="memo-search-clear" class="memo-search-clear hidden" title="지우기">✕</button>
       </div>
+
+      <div class="memo-compose">
+        <textarea id="memo-text" rows="2" placeholder="메모 작성..."></textarea>
+        <div class="memo-compose-tools">
+          <div class="memo-cat-row">
+            <select id="memo-category" class="memo-cat-select" title="항목(라벨)"></select>
+            <button id="add-memo-cat" class="btn btn-ghost btn-sm" title="새 항목 만들기">＋ 항목</button>
+          </div>
+          <button id="add-memo-btn" class="btn btn-primary btn-sm">추가</button>
+        </div>
+      </div>
+
       <div id="memo-list" class="memo-list"></div>
     </section>
   </main>

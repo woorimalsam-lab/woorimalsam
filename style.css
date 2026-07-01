@@ -213,72 +213,157 @@ body {
 .event-desc-txt { font-size: 0.8rem; color: var(--muted); }
 .empty-note { color: var(--muted); font-size: 0.88rem; padding: 6px 0; }
 
-/* ---------- Memo ---------- */
-.memo-input { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-.memo-cat-row { display: flex; gap: 8px; }
+/* ---------- Memo (Google Keep 스타일) ---------- */
+.btn-sm { padding: 6px 12px; font-size: 0.82rem; }
+
+/* 검색 */
+.memo-search-wrap {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 7px 14px; margin-bottom: 14px;
+  background: #f6f8fc;
+}
+.memo-search-wrap:focus-within { background: #fff; border-color: var(--primary); }
+.memo-search-icon { font-size: 0.85rem; opacity: 0.6; }
+.memo-search {
+  flex: 1; border: none; background: transparent; outline: none;
+  font-family: inherit; font-size: 0.9rem; color: var(--ink);
+}
+.memo-search-clear {
+  border: none; background: transparent; cursor: pointer;
+  color: var(--muted); font-size: 0.9rem; line-height: 1;
+}
+
+/* 작성 박스 */
+.memo-compose {
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 12px; margin-bottom: 18px;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.15s ease;
+}
+.memo-compose:focus-within { box-shadow: 0 3px 16px rgba(30,40,70,0.12); }
+.memo-compose textarea {
+  width: 100%; border: none; outline: none; resize: none;
+  font-family: inherit; font-size: 0.95rem; color: var(--ink);
+  background: transparent; line-height: 1.5;
+}
+.memo-compose-tools {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-top: 8px;
+}
+.memo-cat-row { display: flex; gap: 6px; align-items: center; }
 .memo-cat-select {
-  flex: 1;
-  border: 1px solid var(--line); border-radius: 10px;
-  padding: 9px 10px; font-family: inherit; font-size: 0.9rem;
-  background: #fff; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 8px; font-family: inherit; font-size: 0.82rem;
+  background: #fff; color: var(--ink); max-width: 130px;
 }
 .memo-cat-select:focus { outline: none; border-color: var(--primary); }
-.btn-sm { padding: 6px 10px; font-size: 0.82rem; }
 
-/* 항목별 그룹 */
-.memo-group { margin-bottom: 14px; }
-.memo-group-head {
-  display: flex; align-items: center; gap: 8px;
-  margin: 0 2px 8px;
-  font-size: 0.9rem; font-weight: 700; color: var(--ink);
-}
-.memo-group-head::before {
-  content: ""; width: 4px; height: 14px; border-radius: 2px;
-  background: var(--primary);
-}
-.memo-group-count {
-  font-size: 0.72rem; font-weight: 600; color: var(--muted);
-  background: #eef1f6; border-radius: 999px; padding: 1px 8px;
-}
-.memo-group-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.memo-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-.memo-move {
-  font-size: 0.72rem; color: var(--muted);
-  border: 1px solid var(--line); border-radius: 7px;
-  padding: 2px 6px; background: #fafbfe; font-family: inherit;
-  cursor: pointer; max-width: 120px;
-}
-.memo-move:focus { outline: none; border-color: var(--primary); }
-.memo-input textarea, .modal textarea, .modal input, .modal select {
+/* 모달 입력 (유지) */
+.modal textarea, .modal input, .modal select {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px;
-  font-family: inherit;
-  font-size: 0.92rem;
-  resize: vertical;
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px; font-family: inherit; font-size: 0.92rem; resize: vertical;
 }
-.memo-input textarea:focus, .modal textarea:focus, .modal input:focus {
+.modal textarea:focus, .modal input:focus, .modal select:focus {
   outline: none; border-color: var(--primary);
 }
-.memo-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* 그룹(라벨) 헤더 */
+.memo-list { display: flex; flex-direction: column; gap: 6px; }
+.memo-group { margin-bottom: 16px; }
+.memo-group-head {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 2px 10px;
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.03em;
+  color: var(--muted); text-transform: none;
+}
+.memo-group-name { display: inline-flex; align-items: center; gap: 5px; }
+.memo-group-count {
+  font-size: 0.7rem; font-weight: 600; color: var(--muted);
+  background: #eef1f6; border-radius: 999px; padding: 1px 7px;
+}
+.memo-group-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+
+/* 메모 카드 */
 .memo-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  position: relative;
+  border: 1px solid rgba(0,0,0,0.09); border-radius: 12px;
+  padding: 13px 14px 8px;
   background: #fff;
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
 }
-.memo-body { flex: 1; }
-.memo-content { font-size: 0.92rem; white-space: pre-wrap; word-break: break-word; }
-.memo-date { font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
-.memo-del {
+.memo-item:hover { box-shadow: 0 4px 14px rgba(30,40,70,0.13); }
+.memo-content { font-size: 0.93rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: #2b303b; }
+
+/* 카드 색상 */
+.mc-default { background: #ffffff; }
+.mc-red    { background: #fdecec; }
+.mc-orange { background: #fff1e0; }
+.mc-yellow { background: #fff8db; }
+.mc-green  { background: #e7f6ea; }
+.mc-teal   { background: #e0f4f1; }
+.mc-blue   { background: #e8f0fe; }
+.mc-purple { background: #f2e9fd; }
+.mc-pink   { background: #fde8f0; }
+.mc-gray   { background: #f1f3f4; }
+
+/* 고정(핀) 배지 */
+.memo-pin-badge {
+  position: absolute; top: 8px; right: 10px;
+  font-size: 0.85rem; line-height: 1; pointer-events: none;
+}
+
+/* 카드 하단 액션바 */
+.memo-foot {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 8px; min-height: 24px;
+}
+.memo-date { font-size: 0.7rem; color: var(--muted); margin-right: auto; }
+.memo-actions {
+  display: flex; align-items: center; gap: 2px;
+  opacity: 0; transition: opacity 0.12s ease;
+}
+.memo-item:hover .memo-actions,
+.memo-item.pinned .memo-actions { opacity: 1; }
+.memo-ibtn {
   border: none; background: transparent; cursor: pointer;
-  color: var(--muted); font-size: 1.05rem; line-height: 1;
+  color: #5f6472; font-size: 0.95rem; line-height: 1;
+  padding: 4px; border-radius: 6px;
 }
+.memo-ibtn:hover { background: rgba(0,0,0,0.07); }
+.memo-ibtn.on { color: var(--primary); }
+.memo-move {
+  font-size: 0.72rem; color: #5f6472;
+  border: 1px solid rgba(0,0,0,0.12); border-radius: 7px;
+  padding: 3px 5px; background: rgba(255,255,255,0.6); font-family: inherit;
+  cursor: pointer; max-width: 92px;
+}
+.memo-move:focus { outline: none; border-color: var(--primary); }
 .memo-del:hover { color: var(--danger); }
+
+/* 색상 팔레트 */
+.memo-palette {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid rgba(0,0,0,0.07);
+}
+.memo-swatch {
+  width: 20px; height: 20px; border-radius: 50%;
+  cursor: pointer; border: 1px solid rgba(0,0,0,0.15);
+  padding: 0;
+}
+.memo-swatch.sel { box-shadow: 0 0 0 2px var(--primary); border-color: var(--primary); }
+.memo-swatch.sw-default { background:#fff; }
+.memo-swatch.sw-red { background:#fdecec; }
+.memo-swatch.sw-orange { background:#fff1e0; }
+.memo-swatch.sw-yellow { background:#fff8db; }
+.memo-swatch.sw-green { background:#e7f6ea; }
+.memo-swatch.sw-teal { background:#e0f4f1; }
+.memo-swatch.sw-blue { background:#e8f0fe; }
+.memo-swatch.sw-purple { background:#f2e9fd; }
+.memo-swatch.sw-pink { background:#fde8f0; }
+.memo-swatch.sw-gray { background:#f1f3f4; }
 
 /* ---------- Modal ---------- */
 .modal {

@@ -31,12 +31,17 @@ const state = {
   editingEventId: null,    // 모달에서 수정 중인 일정 id
   filters: { work: true, subject: true, academic: true }, // 레이어 표시 여부
   memoCats: [],            // 메모 항목(카테고리) 목록
+  memoSearch: "",          // 메모 검색어
+  paletteFor: null,        // 색상 팔레트가 열린 메모 id
 };
 
 // 메모 항목 관련
 const DEFAULT_MEMO_CATS = ["수업", "업무", "개인"];
 const UNCAT = "미분류";
 const LOCAL_MEMOCATS_KEY = "myplanner.memocats";
+
+// 메모 색상 팔레트 (Google Keep 스타일)
+const MEMO_COLORS = ["default", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "gray"];
 
 // Firebase 핸들 (설정된 경우에만 채워짐)
 let fb = null;
@@ -503,16 +508,38 @@ async function addMemo() {
   if (state.synced && fb) {
     const { addDoc, collection, serverTimestamp } = fb.fs;
     await addDoc(collection(fb.db, "users", state.user.uid, "memos"), {
-      text, category, createdAt: serverTimestamp(),
+      text, category, color: "default", pinned: false, createdAt: serverTimestamp(),
     });
   } else {
     const memos = loadLocal(LOCAL_MEMOS_KEY);
-    memos.push({ id: uid(), text, category, createdAt: Date.now() });
+    memos.push({ id: uid(), text, category, color: "default", pinned: false, createdAt: Date.now() });
     saveLocal(LOCAL_MEMOS_KEY, memos);
     state.memos = loadLocalMemos();
     renderMemos();
   }
   $("memo-text").value = "";
+  $("memo-text").style.height = "auto";
+}
+
+// 메모 속성 변경(색상/고정) 공통 처리
+async function updateMemo(id, patch) {
+  if (state.synced && fb) {
+    const { updateDoc, doc } = fb.fs;
+    await updateDoc(doc(fb.db, "users", state.user.uid, "memos", id), patch);
+  } else {
+    const memos = loadLocal(LOCAL_MEMOS_KEY);
+    const m = memos.find((x) => x.id === id);
+    if (m) { Object.assign(m, patch); saveLocal(LOCAL_MEMOS_KEY, memos); }
+    state.memos = loadLocalMemos();
+    renderMemos();
+  }
+}
+function setMemoColor(id, color) {
+  state.paletteFor = null;
+  updateMemo(id, { color });
+}
+function togglePin(id, pinned) {
+  updateMemo(id, { pinned: !pinned });
 }
 
 async function removeMemo(id) {
@@ -539,6 +566,17 @@ async function moveMemo(id, category) {
   }
 }
 
+function byPinnedThenDate(a, b) {
+  if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+  return (b.createdAt || 0) - (a.createdAt || 0);
+}
+function emptyNote(text) {
+  const p = document.createElement("div");
+  p.className = "empty-note";
+  p.textContent = text;
+  return p;
+}
+
 function renderMemos() {
   rebuildMemoCats();
   renderMemoCatSelect();
@@ -548,20 +586,37 @@ function renderMemos() {
   $("memo-count").textContent = state.memos.length ? `${state.memos.length}개` : "";
 
   if (!state.memos.length) {
-    const p = document.createElement("div");
-    p.className = "empty-note";
-    p.textContent = "메모가 없습니다. 위에서 항목을 고르고 메모를 추가해 보세요.";
-    list.appendChild(p);
+    list.appendChild(emptyNote("메모가 없습니다. 위에 작성해 보세요."));
     return;
   }
 
-  // 표시 순서: 사용자 항목 순서대로, 미분류는 맨 뒤
+  const term = state.memoSearch.trim().toLowerCase();
+
+  // 검색 중: 그룹 없이 평면 결과
+  if (term) {
+    const found = state.memos
+      .filter((m) => (m.text || "").toLowerCase().includes(term))
+      .sort(byPinnedThenDate);
+    if (!found.length) {
+      list.appendChild(emptyNote(`"${state.memoSearch}" 검색 결과가 없습니다.`));
+      return;
+    }
+    list.appendChild(makeMemoGroup("🔍 검색 결과", found));
+    return;
+  }
+
+  // 고정된 메모 먼저 (항목 무관)
+  const pinned = state.memos.filter((m) => m.pinned).sort(byPinnedThenDate);
+  if (pinned.length) list.appendChild(makeMemoGroup("📌 고정됨", pinned));
+
+  // 나머지: 항목(라벨)별 그룹
+  const rest = state.memos.filter((m) => !m.pinned);
   const order = [...state.memoCats];
-  const hasUncat = state.memos.some((m) => !m.category || !state.memoCats.includes(m.category));
+  const hasUncat = rest.some((m) => !m.category || !state.memoCats.includes(m.category));
   if (hasUncat) order.push(UNCAT);
 
   for (const cat of order) {
-    const items = state.memos.filter((m) =>
+    const items = rest.filter((m) =>
       cat === UNCAT
         ? (!m.category || !state.memoCats.includes(m.category))
         : m.category === cat
@@ -570,7 +625,7 @@ function renderMemos() {
   }
 }
 
-function makeMemoGroup(cat, items) {
+function makeMemoGroup(label, items) {
   const group = document.createElement("div");
   group.className = "memo-group";
 
@@ -578,7 +633,7 @@ function makeMemoGroup(cat, items) {
   head.className = "memo-group-head";
   const name = document.createElement("span");
   name.className = "memo-group-name";
-  name.textContent = cat;
+  name.textContent = label;
   const count = document.createElement("span");
   count.className = "memo-group-count";
   count.textContent = items.length;
@@ -586,29 +641,80 @@ function makeMemoGroup(cat, items) {
 
   const ul = document.createElement("ul");
   ul.className = "memo-group-items";
-  for (const m of items) ul.appendChild(makeMemoItem(m, cat));
+  for (const m of items) ul.appendChild(makeMemoItem(m));
 
   group.append(head, ul);
   return group;
 }
 
-function makeMemoItem(m, cat) {
-  const li = document.createElement("li");
-  li.className = "memo-item";
+function iconBtn(label, title) {
+  const b = document.createElement("button");
+  b.className = "memo-ibtn";
+  b.textContent = label;
+  b.title = title;
+  return b;
+}
 
-  const body = document.createElement("div");
-  body.className = "memo-body";
+function makeColorPalette(m) {
+  const wrap = document.createElement("div");
+  wrap.className = "memo-palette";
+  const cur = MEMO_COLORS.includes(m.color) ? m.color : "default";
+  for (const c of MEMO_COLORS) {
+    const sw = document.createElement("button");
+    sw.className = `memo-swatch sw-${c}` + (c === cur ? " sel" : "");
+    sw.title = c === "default" ? "기본" : c;
+    sw.addEventListener("click", () => setMemoColor(m.id, c));
+    wrap.appendChild(sw);
+  }
+  return wrap;
+}
+
+function makeMemoItem(m) {
+  const li = document.createElement("li");
+  const color = MEMO_COLORS.includes(m.color) ? m.color : "default";
+  li.className = `memo-item mc-${color}` + (m.pinned ? " pinned" : "");
+
+  if (m.pinned) {
+    const badge = document.createElement("span");
+    badge.className = "memo-pin-badge";
+    badge.textContent = "📌";
+    li.appendChild(badge);
+  }
+
   const content = document.createElement("div");
   content.className = "memo-content";
   content.textContent = m.text;
+  li.appendChild(content);
 
-  const meta = document.createElement("div");
-  meta.className = "memo-meta";
+  const foot = document.createElement("div");
+  foot.className = "memo-foot";
+  const date = document.createElement("span");
+  date.className = "memo-date";
+  date.textContent = m.createdAt
+    ? new Date(m.createdAt).toLocaleDateString("ko-KR", { month: "short", day: "numeric" })
+    : "";
+  foot.appendChild(date);
 
-  // 다른 항목으로 이동하는 드롭다운
+  const actions = document.createElement("div");
+  actions.className = "memo-actions";
+
+  // 고정
+  const pin = iconBtn(m.pinned ? "📌" : "📍", m.pinned ? "고정 해제" : "고정");
+  if (m.pinned) pin.classList.add("on");
+  pin.addEventListener("click", () => togglePin(m.id, m.pinned));
+
+  // 색상
+  const palette = iconBtn("🎨", "색상 바꾸기");
+  palette.addEventListener("click", () => {
+    state.paletteFor = state.paletteFor === m.id ? null : m.id;
+    renderMemos();
+  });
+
+  // 항목 이동
+  const cat = (m.category && state.memoCats.includes(m.category)) ? m.category : UNCAT;
   const move = document.createElement("select");
   move.className = "memo-move";
-  move.title = "다른 항목으로 이동";
+  move.title = "항목(라벨) 이동";
   const opts = cat === UNCAT ? [UNCAT, ...state.memoCats] : [...state.memoCats];
   for (const c of opts) {
     const o = document.createElement("option");
@@ -621,20 +727,17 @@ function makeMemoItem(m, cat) {
     if (move.value !== cat && move.value !== UNCAT) moveMemo(m.id, move.value);
   });
 
-  const date = document.createElement("span");
-  date.className = "memo-date";
-  date.textContent = m.createdAt ? new Date(m.createdAt).toLocaleString("ko-KR") : "";
-
-  meta.append(move, date);
-  body.append(content, meta);
-
-  const del = document.createElement("button");
-  del.className = "memo-del";
-  del.textContent = "✕";
-  del.title = "삭제";
+  // 삭제
+  const del = iconBtn("🗑", "삭제");
+  del.classList.add("memo-del");
   del.addEventListener("click", () => removeMemo(m.id));
 
-  li.append(body, del);
+  actions.append(pin, palette, move, del);
+  foot.appendChild(actions);
+  li.appendChild(foot);
+
+  if (state.paletteFor === m.id) li.appendChild(makeColorPalette(m));
+
   return li;
 }
 
@@ -657,6 +760,8 @@ function subscribeMemos() {
         id: d.id,
         text: data.text,
         category: data.category || "",
+        color: data.color || "default",
+        pinned: !!data.pinned,
         createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
       };
     });
@@ -782,6 +887,25 @@ function bindEvents() {
   $("add-memo-cat").addEventListener("click", addMemoCategory);
   $("memo-text").addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") addMemo();
+  });
+  // 작성 박스 자동 높이 조절
+  $("memo-text").addEventListener("input", (e) => {
+    e.target.style.height = "auto";
+    e.target.style.height = e.target.scrollHeight + "px";
+  });
+
+  // 메모 검색
+  $("memo-search").addEventListener("input", (e) => {
+    state.memoSearch = e.target.value;
+    $("memo-search-clear").classList.toggle("hidden", !e.target.value);
+    renderMemos();
+  });
+  $("memo-search-clear").addEventListener("click", () => {
+    $("memo-search").value = "";
+    state.memoSearch = "";
+    $("memo-search-clear").classList.add("hidden");
+    renderMemos();
+    $("memo-search").focus();
   });
 }
 
