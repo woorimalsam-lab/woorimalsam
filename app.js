@@ -1261,28 +1261,54 @@ function bindEvents() {
 }
 
 // ============================================================
-//  시간표
+//  시간표 (학생별)
 // ============================================================
-function loadTimetable() {
-  state.timetable = loadLocal(LOCAL_TIMETABLE_KEY) || { mon: [], tue: [], wed: [], thu: [], fri: [] };
+const LOCAL_STUDENT_TIMETABLES_KEY = "myplanner.studentTimetables";
+
+function loadTimetables() {
+  state.studentTimetables = loadLocal(LOCAL_STUDENT_TIMETABLES_KEY) || {};
 }
-function saveTimetable() {
-  saveLocal(LOCAL_TIMETABLE_KEY, state.timetable);
-  renderTimetable();
+function saveTimetables() {
+  saveLocal(LOCAL_STUDENT_TIMETABLES_KEY, state.studentTimetables);
 }
 function renderTimetable() {
   const display = $("timetable-display");
   if (!display) return;
+
+  // 학생 선택 드롭다운 업데이트
+  const select = $("tt-student-select");
+  if (select) {
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">-- 학생을 선택하세요 --</option>';
+    state.students.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = `${s.class ? s.class + '반 ' + s.number + '번 ' : ''}${s.name}`;
+      select.appendChild(opt);
+    });
+    select.value = currentVal;
+  }
+
+  // 선택된 학생의 시간표 표시
+  const studentId = $("tt-student-select")?.value;
+  if (!studentId) {
+    display.innerHTML = '<p style="text-align: center; color: var(--muted); padding: 30px;">학생을 선택해 주세요</p>';
+    return;
+  }
+
+  const tt = state.studentTimetables[studentId] || { mon: [], tue: [], wed: [], thu: [], fri: [] };
   const days = ["월", "화", "수", "목", "금"];
   const dayKeys = ["mon", "tue", "wed", "thu", "fri"];
+
   let html = '<table class="timetable-grid"><thead><tr><th>교시</th>';
   days.forEach(d => html += `<th>${d}</th>`);
   html += '</tr></thead><tbody>';
-  const maxPeriods = Math.max(...dayKeys.map(k => state.timetable[k]?.length || 0), 6);
+
+  const maxPeriods = Math.max(...dayKeys.map(k => tt[k]?.length || 0), 7);
   for (let p = 0; p < maxPeriods; p++) {
     html += `<tr><td>${p + 1}</td>`;
     dayKeys.forEach(k => {
-      const subj = state.timetable[k]?.[p] || "";
+      const subj = tt[k]?.[p] || "";
       html += `<td>${subj}</td>`;
     });
     html += '</tr>';
@@ -1290,11 +1316,12 @@ function renderTimetable() {
   html += '</tbody></table>';
   display.innerHTML = html;
 
+  // 대시보드의 오늘 시간표 업데이트
   const todayIdx = new Date().getDay() - 1;
   if (todayIdx >= 0 && todayIdx < 5) {
     const todayTt = $("today-timetable");
     if (todayTt) {
-      const today = state.timetable[dayKeys[todayIdx]] || [];
+      const today = tt[dayKeys[todayIdx]] || [];
       if (today.length) {
         todayTt.innerHTML = today.map((s, i) => `<div class="today-timetable-item">${i + 1}교시: ${s}</div>`).join("");
       } else {
@@ -1303,20 +1330,40 @@ function renderTimetable() {
     }
   }
 }
+
 function renderTimetableEditor() {
   const grid = $("timetable-grid");
-  if (!grid) return;
-  const periods = parseInt($("tt-periods").value) || 6;
+  const editSelect = $("tt-edit-student");
+  if (!grid || !editSelect) return;
+
+  // 편집용 학생 선택 드롭다운
+  editSelect.innerHTML = '<option value="">-- 학생을 선택하세요 --</option>';
+  state.students.forEach(s => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = `${s.class ? s.class + '반 ' + s.number + '번 ' : ''}${s.name}`;
+    editSelect.appendChild(opt);
+  });
+
+  const studentId = editSelect.value;
+  if (!studentId) {
+    grid.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 30px; color: var(--muted);">학생을 선택해 주세요</td></tr>';
+    return;
+  }
+
+  const tt = state.studentTimetables[studentId] || { mon: [], tue: [], wed: [], thu: [], fri: [] };
+  const periods = parseInt($("tt-periods").value) || 7;
   const days = ["mon", "tue", "wed", "thu", "fri"];
   const dayLabels = ["월", "화", "수", "목", "금"];
+
   let html = '<thead><tr><th>교시</th>';
   dayLabels.forEach(d => html += `<th>${d}</th>`);
   html += '</tr></thead><tbody>';
   for (let p = 0; p < periods; p++) {
     html += `<tr><td>${p + 1}</td>`;
     days.forEach((d, idx) => {
-      const val = state.timetable[d]?.[p] || "";
-      html += `<td><input type="text" data-day="${d}" data-period="${p}" value="${val}" /></td>`;
+      const val = tt[d]?.[p] || "";
+      html += `<td><input type="text" data-day="${d}" data-period="${p}" value="${val}" placeholder="..." /></td>`;
     });
     html += '</tr>';
   }
@@ -1614,15 +1661,31 @@ function bindEventsNew() {
     $("timetable-editor").classList.toggle("hidden");
     renderTimetableEditor();
   });
+  $("tt-student-select")?.addEventListener("change", renderTimetable);
+  $("tt-periods")?.addEventListener("change", renderTimetableEditor);
+  $("tt-edit-student")?.addEventListener("change", renderTimetableEditor);
+  $("tt-generate-btn")?.addEventListener("click", renderTimetableEditor);
+
   $("save-timetable-btn")?.addEventListener("click", () => {
+    const studentId = $("tt-edit-student").value;
+    if (!studentId) { toast("학생을 선택해 주세요"); return; }
+
+    if (!state.studentTimetables[studentId]) {
+      state.studentTimetables[studentId] = { mon: [], tue: [], wed: [], thu: [], fri: [] };
+    }
+
     const inputs = $("timetable-grid").querySelectorAll("input");
     inputs.forEach(inp => {
       const day = inp.dataset.day, period = parseInt(inp.dataset.period);
-      if (!state.timetable[day]) state.timetable[day] = [];
-      state.timetable[day][period] = inp.value;
+      if (!state.studentTimetables[studentId][day]) {
+        state.studentTimetables[studentId][day] = [];
+      }
+      state.studentTimetables[studentId][day][period] = inp.value;
     });
+
     $("timetable-editor").classList.add("hidden");
-    saveTimetable();
+    saveTimetables();
+    renderTimetable();
     toast("시간표가 저장되었습니다");
   });
   $("cancel-timetable-btn")?.addEventListener("click", () => $("timetable-editor").classList.add("hidden"));
@@ -1739,7 +1802,7 @@ async function start() {
   updateAccountUI();
 
   // 각 기능 데이터 로드
-  loadTimetable();
+  loadTimetables();
   loadSeating();
   loadStudents();
   loadSettings();

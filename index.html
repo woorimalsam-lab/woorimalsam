@@ -82,15 +82,27 @@
           <button id="edit-timetable-btn" class="btn btn-primary btn-sm">편집</button>
         </div>
 
+        <div class="timetable-student-select">
+          <label>학생 선택:
+            <select id="tt-student-select">
+              <option value="">-- 학생을 선택하세요 --</option>
+            </select>
+          </label>
+        </div>
+
         <div id="timetable-display" class="timetable-display"></div>
 
         <div id="timetable-editor" class="timetable-editor hidden">
           <div class="tt-controls">
-            <label>교시 수: <input id="tt-periods" type="number" value="6" min="1" max="8" /></label>
+            <label>학생: <select id="tt-edit-student"></select></label>
+            <label>교시 수: <input id="tt-periods" type="number" value="7" min="1" max="8" /></label>
+            <button id="tt-generate-btn" class="btn btn-ghost btn-sm">시간표 생성</button>
             <button id="save-timetable-btn" class="btn btn-primary">저장</button>
             <button id="cancel-timetable-btn" class="btn btn-ghost">취소</button>
           </div>
-          <table class="timetable-grid" id="timetable-grid"></table>
+          <div class="timetable-editor-wrapper">
+            <table class="timetable-grid" id="timetable-grid"></table>
+          </div>
         </div>
       </div>
     </section>

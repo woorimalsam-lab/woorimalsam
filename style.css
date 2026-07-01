@@ -618,27 +618,42 @@ body {
 ============================================================ */
 
 /* 시간표 */
+.timetable-student-select { margin-bottom: 14px; }
+.timetable-student-select label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.timetable-student-select select { flex: 1; max-width: 300px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
+
 .timetable-display { overflow-x: auto; margin-bottom: 16px; }
 .timetable-grid {
   width: 100%; border-collapse: collapse;
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 10px; overflow: hidden;
+  background: var(--panel);
 }
 .timetable-grid th, .timetable-grid td {
-  border: 1px solid var(--line); padding: 12px;
-  text-align: center; font-size: 0.9rem;
+  border: 1px solid var(--line); padding: 14px 12px;
+  text-align: center; font-size: 0.9rem; height: 60px;
+  word-break: break-word;
 }
 .timetable-grid th { background: var(--accent-soft); font-weight: 700; }
-.timetable-grid tbody tr:nth-child(even) { background: #f9fafc; }
+.timetable-grid tbody tr:nth-child(even) { background: #fafbfe; }
+.timetable-grid th:first-child, .timetable-grid td:first-child {
+  font-weight: 600; background: var(--accent-soft); width: 80px;
+}
 .timetable-grid input {
   border: none; background: transparent; width: 100%;
-  text-align: center; font-family: inherit; font-size: 0.85rem;
+  text-align: center; font-family: inherit; font-size: 0.85rem; padding: 2px;
+  min-height: 20px;
 }
-.timetable-grid input:focus { outline: 2px solid var(--primary); border-radius: 4px; }
+.timetable-grid input:focus { outline: 2px solid var(--primary); border-radius: 4px; background: #fffef0; }
+
 .timetable-editor { margin-top: 16px; padding: 16px; background: #fafbfe; border-radius: 12px; }
-.tt-controls { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+.tt-controls { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
 .tt-controls label { display: flex; align-items: center; gap: 8px; }
+.tt-controls select, .tt-controls input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
+.tt-controls select { min-width: 150px; }
 .tt-controls input { width: 60px; }
+.timetable-editor-wrapper { overflow-x: auto; }
+
 .today-timetable { font-size: 0.9rem; display: flex; flex-direction: column; gap: 4px; }
 .today-timetable-item { padding: 6px 8px; border-radius: 8px; border-left: 4px solid var(--primary); background: var(--accent-soft); }
 .today-timetable-empty { padding: 8px; color: var(--muted); }
@@ -743,10 +758,18 @@ body {
 .settings-section p { margin: 4px 0; font-size: 0.9rem; color: var(--muted); }
 
 /* 다크모드 새로운 섹션 */
-[data-theme="dark"] .timetable-grid th { background: #2a2e38; }
-[data-theme="dark"] .timetable-grid tbody tr:nth-child(even) { background: #1a1f2b; }
-[data-theme="dark"] .timetable-grid input { color: var(--ink); }
+[data-theme="dark"] .timetable-student-select select { background: #1f2430; color: var(--ink); border-color: #2a2e38; }
+[data-theme="dark"] .timetable-grid { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .timetable-grid th { background: #2a2e38; color: var(--ink); }
+[data-theme="dark"] .timetable-grid th:first-child, [data-theme="dark"] .timetable-grid td:first-child { background: #2a2e38; }
+[data-theme="dark"] .timetable-grid td { border-color: #2a2e38; }
+[data-theme="dark"] .timetable-grid tbody tr:nth-child(even) { background: #262c3a; }
+[data-theme="dark"] .timetable-grid input { color: var(--ink); background: transparent; }
+[data-theme="dark"] .timetable-grid input:focus { background: #1a1f2b; }
 [data-theme="dark"] .timetable-editor { background: #1a1f2b; }
+[data-theme="dark"] .tt-controls select, [data-theme="dark"] .tt-controls input {
+  background: #1f2430; color: var(--ink); border-color: #2a2e38;
+}
 [data-theme="dark"] .seating-config { background: #1a1f2b; }
 [data-theme="dark"] .seating-seat { background: #1f2430; border-color: #2a2e38; }
 [data-theme="dark"] .seating-seat:hover { background: #262c3a; }
