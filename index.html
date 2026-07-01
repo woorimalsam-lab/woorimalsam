@@ -104,15 +104,22 @@
         <div class="panel-head">
           <h2>자리배치</h2>
           <div style="display: flex; gap: 8px;">
-            <button id="random-seating-btn" class="btn btn-ghost btn-sm">🔀 랜덤</button>
-            <button id="edit-seating-btn" class="btn btn-primary btn-sm">편집</button>
+            <button id="random-seating-btn" class="btn btn-ghost btn-sm">🔀 랜덤 배치</button>
+            <button id="edit-seating-btn" class="btn btn-primary btn-sm">행·열 설정</button>
           </div>
         </div>
 
+        <div class="seating-toolbar">
+          <label>반 선택:
+            <select id="seating-class"></select>
+          </label>
+          <span id="seating-count" class="muted"></span>
+        </div>
+
         <div class="seating-config hidden">
-          <label>행: <input id="seating-rows" type="number" value="6" min="1" max="10" /></label>
-          <label>열: <input id="seating-cols" type="number" value="8" min="1" max="10" /></label>
-          <button id="create-seating-btn" class="btn btn-primary btn-sm">생성</button>
+          <label>행: <input id="seating-rows" type="number" value="5" min="1" max="10" /></label>
+          <label>열: <input id="seating-cols" type="number" value="6" min="1" max="10" /></label>
+          <button id="create-seating-btn" class="btn btn-primary btn-sm">적용 (현재 반 초기화)</button>
         </div>
 
         <div id="seating-display" class="seating-display"></div>

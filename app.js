@@ -1419,47 +1419,96 @@ function collectTimetableInputs() {
 // ============================================================
 let seatPicked = null;   // 자리 바꾸기용 첫 번째 선택 좌석 {r, c}
 
+// 저장 구조: { rows, cols, currentClass, grids: { "8": [[{num,name}|null,...]], ... } }
+// 반마다 배치를 따로 저장. "all"은 반 정보 없는 학생용.
+function emptyGrid(rows, cols) {
+  return Array(rows).fill(null).map(() => Array(cols).fill(null));
+}
 function loadSeating() {
   const s = loadLocal(LOCAL_SEATING_KEY);
-  // loadLocal은 빈 값일 때 []를 반환 → 객체 형태 검증 필수
-  if (s && !Array.isArray(s) && s.rows && s.cols && Array.isArray(s.grid)) {
+  if (s && !Array.isArray(s) && s.rows && s.cols && s.grids) {
     state.seating = s;
+  } else if (s && !Array.isArray(s) && s.rows && s.cols && Array.isArray(s.grid)) {
+    // 예전 단일 grid(이름 문자열) 형식 → 새 형식으로 이행
+    const grid = s.grid.map((row) => row.map((cell) => (cell ? { num: "", name: cell } : null)));
+    state.seating = { rows: s.rows, cols: s.cols, currentClass: "all", grids: { all: grid } };
   } else {
-    state.seating = { rows: 5, cols: 6, grid: [] };
-    initSeatingGrid();
+    state.seating = { rows: 5, cols: 6, currentClass: "all", grids: {} };
   }
-}
-function initSeatingGrid() {
-  state.seating.grid = Array(state.seating.rows).fill(null).map(() => Array(state.seating.cols).fill(""));
 }
 function saveSeating() {
   saveLocal(LOCAL_SEATING_KEY, state.seating);
 }
+// 현재 반의 grid (치수가 안 맞거나 없으면 새로 만듦)
+function currentGrid() {
+  const { rows, cols, currentClass, grids } = state.seating;
+  let g = grids[currentClass];
+  if (!Array.isArray(g) || g.length !== rows || (g[0] || []).length !== cols) {
+    g = emptyGrid(rows, cols);
+    grids[currentClass] = g;
+  }
+  return g;
+}
+// 자리배치용 반 목록: 학생이 있는 반들 (반 미지정 학생이 있으면 "all"도)
+function seatingClassOptions() {
+  const classes = studentClasses().filter((c) => c !== "");
+  const hasUnassigned = state.students.some((s) => !s.class);
+  const opts = classes.map((c) => ({ value: c, label: `${c}반` }));
+  if (hasUnassigned || !classes.length) opts.push({ value: "all", label: classes.length ? "반 미지정" : "전체" });
+  return opts;
+}
+// 선택된 반의 학생들 (번호순)
+function seatingStudents() {
+  const cls = state.seating.currentClass;
+  const pool = cls === "all"
+    ? state.students.filter((s) => !s.class)
+    : state.students.filter((s) => s.class === cls);
+  return [...pool].sort((a, b) => (Number(a.number) || 0) - (Number(b.number) || 0));
+}
+
 function renderSeating() {
   const display = $("seating-display");
   if (!display) return;
-  const { rows, cols, grid } = state.seating;
+
+  // 반 선택 드롭다운 갱신
+  const select = $("seating-class");
+  if (select) {
+    const opts = seatingClassOptions();
+    if (!opts.some((o) => o.value === state.seating.currentClass)) {
+      state.seating.currentClass = opts[0]?.value || "all";
+    }
+    select.innerHTML = opts.map((o) => `<option value="${o.value}">${o.label}</option>`).join("");
+    select.value = state.seating.currentClass;
+  }
+  const count = $("seating-count");
+  if (count) count.textContent = `${seatingStudents().length}명`;
+
+  const { rows, cols } = state.seating;
+  const grid = currentGrid();
   let html = '<div class="seating-board">칠판</div>';
   html += `<div class="seating-grid" style="grid-template-columns: repeat(${cols}, 1fr)">`;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const name = grid[r]?.[c] || "";
+      const seat = grid[r]?.[c];
       const sel = seatPicked && seatPicked.r === r && seatPicked.c === c;
-      html += `<div class="seating-seat${name ? "" : " empty"}${sel ? " selected" : ""}" data-row="${r}" data-col="${c}">${name || "－"}</div>`;
+      const label = seat
+        ? `${seat.num ? `<b class="seat-num">${escapeHtml(seat.num)}</b>` : ""}${escapeHtml(seat.name)}`
+        : "－";
+      html += `<div class="seating-seat${seat ? "" : " empty"}${sel ? " selected" : ""}" data-row="${r}" data-col="${c}">${label}</div>`;
     }
   }
   html += "</div>";
   html += '<p class="seating-hint muted">좌석을 하나 누른 뒤 다른 좌석을 누르면 서로 자리가 바뀝니다.</p>';
   display.innerHTML = html;
 }
-// 좌석 두 개를 차례로 눌러 맞바꾸기
+// 좌석 두 개를 차례로 눌러 맞바꾸기 (현재 반의 배치에서)
 function onSeatClick(r, c) {
   if (!seatPicked) {
     seatPicked = { r, c };
   } else if (seatPicked.r === r && seatPicked.c === c) {
     seatPicked = null;   // 같은 좌석 다시 누르면 선택 해제
   } else {
-    const g = state.seating.grid;
+    const g = currentGrid();
     [g[seatPicked.r][seatPicked.c], g[r][c]] = [g[r][c], g[seatPicked.r][seatPicked.c]];
     seatPicked = null;
     saveSeating();
@@ -1467,28 +1516,32 @@ function onSeatClick(r, c) {
   renderSeating();
 }
 function randomSeating() {
-  const students = state.students.map((s) => s.name);
-  if (!students.length) { toast("먼저 '학생' 메뉴에서 학생을 등록해 주세요"); return; }
+  const pool = seatingStudents();
+  if (!pool.length) { toast("이 반에 학생이 없습니다. '학생' 메뉴에서 명렬표를 올려 주세요."); return; }
   const seats = state.seating.rows * state.seating.cols;
-  if (students.length > seats) {
-    toast(`좌석(${seats}석)보다 학생(${students.length}명)이 많습니다. 행/열을 늘려 주세요.`, 5000);
+  if (pool.length > seats) {
+    toast(`좌석(${seats}석)보다 학생(${pool.length}명)이 많습니다. 행·열 설정에서 늘려 주세요.`, 5000);
     return;
   }
-  for (let i = students.length - 1; i > 0; i--) {
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [students[i], students[j]] = [students[j], students[i]];
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  initSeatingGrid();
+  const g = emptyGrid(state.seating.rows, state.seating.cols);
   let idx = 0;
-  for (let r = 0; r < state.seating.rows && idx < students.length; r++) {
-    for (let c = 0; c < state.seating.cols && idx < students.length; c++) {
-      state.seating.grid[r][c] = students[idx++];
+  for (let r = 0; r < state.seating.rows && idx < shuffled.length; r++) {
+    for (let c = 0; c < state.seating.cols && idx < shuffled.length; c++) {
+      const s = shuffled[idx++];
+      g[r][c] = { num: s.number || "", name: s.name };
     }
   }
+  state.seating.grids[state.seating.currentClass] = g;
   seatPicked = null;
   saveSeating();
   renderSeating();
-  toast(`🔀 ${students.length}명 자리배치 완료`);
+  const cls = state.seating.currentClass;
+  toast(`🔀 ${cls === "all" ? "" : cls + "반 "}${shuffled.length}명 자리배치 완료`);
 }
 
 // ============================================================
@@ -1904,6 +1957,12 @@ function bindEventsNew() {
 
   // 자리배치
   $("random-seating-btn")?.addEventListener("click", randomSeating);
+  $("seating-class")?.addEventListener("change", (e) => {
+    state.seating.currentClass = e.target.value;
+    seatPicked = null;
+    saveSeating();
+    renderSeating();
+  });
   $("edit-seating-btn")?.addEventListener("click", () => {
     $("seating-rows").value = state.seating.rows;
     $("seating-cols").value = state.seating.cols;
@@ -1912,7 +1971,8 @@ function bindEventsNew() {
   $("create-seating-btn")?.addEventListener("click", () => {
     state.seating.rows = Math.min(Math.max(parseInt($("seating-rows").value) || 5, 1), 10);
     state.seating.cols = Math.min(Math.max(parseInt($("seating-cols").value) || 6, 1), 10);
-    initSeatingGrid();
+    // 치수가 바뀌면 currentGrid()가 반별로 새 격자를 만들므로 현재 반만 비움
+    delete state.seating.grids[state.seating.currentClass];
     seatPicked = null;
     saveSeating();
     renderSeating();
