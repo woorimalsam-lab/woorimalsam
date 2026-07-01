@@ -123,9 +123,33 @@
           <h2>학생 기록</h2>
         </div>
 
-        <div class="student-controls">
-          <input id="student-name" type="text" placeholder="학생 이름 입력" />
-          <button id="add-student-btn" class="btn btn-primary btn-sm">추가</button>
+        <div class="student-tabs">
+          <button class="student-tab-btn active" data-tab="manual">수동 추가</button>
+          <button class="student-tab-btn" data-tab="import">NEIS 명렬표 가져오기</button>
+        </div>
+
+        <!-- 수동 추가 탭 -->
+        <div id="student-tab-manual" class="student-tab-content">
+          <div class="student-controls">
+            <input id="student-name" type="text" placeholder="학생 이름 입력" />
+            <button id="add-student-btn" class="btn btn-primary btn-sm">추가</button>
+          </div>
+        </div>
+
+        <!-- NEIS 가져오기 탭 -->
+        <div id="student-tab-import" class="student-tab-content hidden">
+          <div class="import-guide">
+            <p>📋 <strong>NEIS 명렬표 CSV 파일</strong>을 업로드하면 자동으로 반, 번호, 이름이 추가됩니다.</p>
+            <p style="font-size: 0.85rem; color: var(--muted);">
+              파일 형식: 반, 번호, 이름 컬럼을 포함한 CSV 파일<br/>
+              예: 1반 1번 홍길동
+            </p>
+          </div>
+          <div class="student-import-controls">
+            <input id="neis-file" type="file" accept=".csv,.xlsx,.xls" />
+            <button id="neis-import-btn" class="btn btn-primary btn-sm">파일 업로드</button>
+          </div>
+          <div id="import-result" class="import-result hidden"></div>
         </div>
 
         <div class="students-list" id="students-list"></div>

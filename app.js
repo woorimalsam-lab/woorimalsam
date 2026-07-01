@@ -1404,12 +1404,60 @@ function renderStudents() {
   list.innerHTML = state.students.map(s => `
     <div class="student-card">
       <div class="student-header">
-        <span>${s.name}</span>
+        <span>${s.class ? `${s.class}반 ${s.number}번` : ''} ${s.name}</span>
         <button class="btn btn-danger btn-sm" onclick="removeStudent('${s.id}')">삭제</button>
       </div>
       <textarea placeholder="메모..." onchange="updateStudentNotes('${s.id}', this.value)" style="width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px;">${s.notes}</textarea>
     </div>
   `).join("");
+}
+
+// NEIS 명렬표 파싱
+function parseNEISFile(content) {
+  const lines = content.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { success: false, msg: "파일이 비어있습니다" };
+
+  const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+
+  // 헤더 컬럼 감지
+  let classIdx = -1, numberIdx = -1, nameIdx = -1, gradeIdx = -1;
+  for (let i = 0; i < header.length; i++) {
+    const h = header[i];
+    if (h.includes('반') || h === 'class' || h === 'classroom') classIdx = i;
+    if (h.includes('번호') || h === 'number' || h === 'no') numberIdx = i;
+    if (h.includes('이름') || h === 'name') nameIdx = i;
+    if (h.includes('학년') || h === 'grade') gradeIdx = i;
+  }
+
+  if (nameIdx === -1) return { success: false, msg: "이름 컬럼을 찾을 수 없습니다" };
+
+  const students = [];
+  let added = 0;
+
+  for (let i = 1; i < lines.length; i++) {
+    const row = lines[i].split(',').map(c => c.trim());
+    if (row.length <= nameIdx || !row[nameIdx]) continue;
+
+    const name = row[nameIdx];
+    const klass = classIdx >= 0 && row[classIdx] ? row[classIdx].replace(/반|^0/, '') : "";
+    const number = numberIdx >= 0 && row[numberIdx] ? row[numberIdx].replace(/^0/, '') : "";
+
+    // 중복 체크
+    if (state.students.find(s => s.name === name && s.class === klass && s.number === number)) continue;
+
+    state.students.push({
+      id: uid(),
+      name,
+      class: klass,
+      number,
+      notes: "",
+      date: new Date().toISOString()
+    });
+    added++;
+  }
+
+  saveStudents();
+  return { success: true, added, msg: `${added}명의 학생이 추가되었습니다` };
 }
 
 // ============================================================
@@ -1591,9 +1639,40 @@ function bindEventsNew() {
     $("seating-config").classList.add("hidden");
   });
 
-  // 학생
+  // 학생 - 탭 전환
+  document.querySelectorAll(".student-tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".student-tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".student-tab-content").forEach(c => c.classList.add("hidden"));
+      btn.classList.add("active");
+      $("student-tab-" + btn.dataset.tab)?.classList.remove("hidden");
+    });
+  });
+
+  // 학생 - 수동 추가
   $("add-student-btn")?.addEventListener("click", addStudent);
   $("student-name")?.addEventListener("keydown", (e) => { if (e.key === "Enter") addStudent(); });
+
+  // 학생 - NEIS 파일 업로드
+  $("neis-import-btn")?.addEventListener("click", () => {
+    const file = $("neis-file")?.files?.[0];
+    if (!file) { toast("파일을 선택해 주세요"); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = parseNEISFile(e.target.result);
+      const resultDiv = $("import-result");
+      if (resultDiv) {
+        resultDiv.classList.remove("hidden", "success", "error");
+        resultDiv.classList.add(result.success ? "success" : "error");
+        resultDiv.innerHTML = `<strong>${result.success ? "✅" : "❌"}</strong> ${result.msg}`;
+      }
+      if (result.success) {
+        renderStudents();
+        setTimeout(() => { $("neis-file").value = ""; resultDiv.classList.add("hidden"); }, 2000);
+      }
+    };
+    reader.readAsText(file);
+  });
 
   // 설정
   $("save-settings-btn")?.addEventListener("click", saveSettings);

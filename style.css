@@ -661,8 +661,29 @@ body {
 .seating-seat.selected { border-color: var(--primary); background: var(--primary); color: #fff; }
 
 /* 학생 기록 */
+.student-tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.student-tab-btn {
+  flex: 1; padding: 12px 16px; border: none; background: transparent;
+  cursor: pointer; font-weight: 600; font-size: 0.9rem;
+  color: var(--muted); border-bottom: 3px solid transparent;
+  transition: all 0.12s ease;
+}
+.student-tab-btn:hover { color: var(--ink); }
+.student-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+.student-tab-content { display: none; }
+.student-tab-content.active { display: block; }
+
 .student-controls { display: flex; gap: 8px; margin-bottom: 16px; }
 .student-controls input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+
+.import-guide { padding: 12px; background: var(--accent-soft); border-radius: 10px; margin-bottom: 16px; }
+.import-guide p { margin: 6px 0; }
+.student-import-controls { display: flex; gap: 8px; margin-bottom: 16px; }
+.student-import-controls input { flex: 1; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.import-result { padding: 12px; border-radius: 10px; margin-bottom: 16px; }
+.import-result.success { background: #e9f7f0; color: var(--cat-subject); }
+.import-result.error { background: #fef2f2; color: var(--danger); }
+
 .students-list { display: flex; flex-direction: column; gap: 10px; }
 .student-card {
   border: 1px solid var(--line); border-radius: 12px; padding: 14px;
@@ -731,6 +752,11 @@ body {
 [data-theme="dark"] .seating-seat:hover { background: #262c3a; }
 [data-theme="dark"] .student-card { background: #1f2430; border-color: #2a2e38; }
 [data-theme="dark"] .student-notes { background: #262c3a; }
+[data-theme="dark"] .student-tab-btn { color: #b3b9c6; }
+[data-theme="dark"] .student-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+[data-theme="dark"] .student-tabs { border-bottom-color: #2a2e38; }
+[data-theme="dark"] .import-guide { background: #262c3a; }
+[data-theme="dark"] .student-import-controls input { background: #1f2430; color: var(--ink); border-color: #2a2e38; }
 [data-theme="dark"] .tool-card { background: #1f2430; border-color: #2a2e38; }
 [data-theme="dark"] .timer-display, [data-theme="dark"] .stopwatch-display,
 [data-theme="dark"] .dice-display, [data-theme="dark"] .rps-display {
