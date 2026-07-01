@@ -1553,67 +1553,106 @@ function renderStudents() {
   list.innerHTML = html;
 }
 
-// NEIS 명렬표 파싱 (CSV/Excel)
+// ---------- NEIS 명렬표 파싱 (CSV/Excel) ----------
+// 나이스 원본 xlsx 구조: 위쪽 여러 행이 제목/날짜/담당교사이고,
+// 헤더 행("학년/학과/반/번호/성 명")이 중간(예: 9행)에 있음. 숫자는 8.0처럼 실수형.
+
+// "8.0" → "8" 정규화
+function cellStr(v) {
+  const s = String(v ?? "").trim();
+  const m = /^(\d+)(\.0+)?$/.exec(s);
+  return m ? m[1] : s;
+}
+
 function parseNEISData(data) {
-  // data는 배열의 배열 [[헤더...], [행1...], [행2...], ...]
-  if (!Array.isArray(data) || data.length < 2) return { success: false, msg: "파일이 비어있습니다" };
+  if (!Array.isArray(data) || !data.length) return { success: false, msg: "파일이 비어있습니다" };
 
-  const header = data[0].map(h => String(h || "").trim().toLowerCase());
-
-  // 헤더 컬럼 감지
-  let classIdx = -1, numberIdx = -1, nameIdx = -1, gradeIdx = -1;
-  for (let i = 0; i < header.length; i++) {
-    const h = header[i];
-    if (h.includes('반') || h === 'class' || h === 'classroom') classIdx = i;
-    if (h.includes('번호') || h === 'number' || h === 'no' || h === '번') numberIdx = i;
-    if (h.includes('이름') || h === 'name' || h === '이름') nameIdx = i;
-    if (h.includes('학년') || h === 'grade' || h === '학년') gradeIdx = i;
+  // 1) 헤더 행 탐색: 위에서 30행 안에서 '성명'/'이름' 칸이 있는 행 ("성 명"처럼 띄어쓰기 허용)
+  let headerRow = -1;
+  let classIdx = -1, numberIdx = -1, nameIdx = -1;
+  const scanMax = Math.min(data.length, 30);
+  for (let r = 0; r < scanMax; r++) {
+    const row = data[r] || [];
+    let cI = -1, nI = -1, nmI = -1;
+    for (let i = 0; i < row.length; i++) {
+      const h = cellStr(row[i]).replace(/\s+/g, "").toLowerCase();
+      if (!h) continue;
+      if (h === "반" || h === "class") cI = i;
+      if (h === "번호" || h === "번" || h === "no" || h === "number") nI = i;
+      if (h === "성명" || h === "이름" || h === "name") nmI = i;
+    }
+    if (nmI !== -1) {
+      headerRow = r; classIdx = cI; numberIdx = nI; nameIdx = nmI;
+      break;
+    }
   }
 
-  // 컬럼을 찾지 못했으면 위치로 추측
-  if (nameIdx === -1 && header.length > 0) nameIdx = header.length - 1;  // 마지막 컬럼을 이름으로
-  if (classIdx === -1 && header.length > 1) classIdx = 0;               // 첫 번째를 반으로
-  if (numberIdx === -1 && header.length > 2) numberIdx = 1;             // 두 번째를 번호로
+  // 2) 제목 행에서 "2-8" 같은 반 정보 추출 (반 칸이 없는 파일 대비)
+  let fallbackClass = "";
+  for (let r = 0; r < Math.max(headerRow, 0); r++) {
+    const joined = (data[r] || []).map((v) => String(v ?? "")).join(" ");
+    const m = /(\d{1,2})\s*학년\s*(\d{1,2})\s*반/.exec(joined) || /(\d{1,2})\s*-\s*(\d{1,2})/.exec(joined);
+    if (m) { fallbackClass = m[2]; break; }
+  }
 
-  if (nameIdx === -1) return { success: false, msg: "이름 컬럼을 찾을 수 없습니다" };
+  let added = 0, skippedDup = 0;
 
-  let added = 0;
+  for (let i = headerRow + 1; i < data.length; i++) {
+    const row = (data[i] || []).map(cellStr);
+    if (!row.some(Boolean)) continue;   // 빈 행
 
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i].map(c => String(c || "").trim());
-    if (row.length <= nameIdx || !row[nameIdx]) continue;
+    let name, klass, number;
+    if (nameIdx !== -1) {
+      name = row[nameIdx] || "";
+      klass = (classIdx !== -1 ? row[classIdx] : "") || fallbackClass;
+      number = numberIdx !== -1 ? row[numberIdx] : "";
+    } else {
+      // 헤더 없는 단순 형식: 반, 번호, 이름 순 (2칸이면 번호, 이름)
+      const vals = row.filter(Boolean);
+      if (vals.length >= 3) [klass, number, name] = vals;
+      else if (vals.length === 2) { [number, name] = vals; klass = fallbackClass; }
+      else { name = vals[0] || ""; klass = fallbackClass; number = ""; }
+    }
 
-    const name = row[nameIdx];
-    if (!name) continue;
+    if (!name || /^\d+$/.test(name)) continue;   // 이름이 비었거나 숫자면 데이터 행 아님
+    klass = (klass || "").replace(/반$/, "");
+    number = (number || "").replace(/번$/, "");
 
-    const klass = classIdx >= 0 && row[classIdx] ? String(row[classIdx]).replace(/반|^0/, '') : "";
-    const number = numberIdx >= 0 && row[numberIdx] ? String(row[numberIdx]).replace(/^0/, '') : "";
-
-    // 중복 체크
-    if (state.students.find(s => s.name === name && s.class === klass && s.number === number)) continue;
-
+    if (state.students.find((s) => s.name === name && s.class === klass && s.number === number)) {
+      skippedDup++;
+      continue;
+    }
     state.students.push({
-      id: uid(),
-      name,
-      class: klass,
-      number,
-      notes: "",
-      date: new Date().toISOString()
+      id: uid(), name, class: klass, number,
+      notes: "", date: new Date().toISOString(),
     });
     added++;
   }
 
+  if (!added && !skippedDup) return { success: false, msg: "학생 데이터를 찾지 못했습니다. 파일 형식을 확인해 주세요." };
   saveStudents();
-  return { success: true, added, msg: `${added}명의 학생이 추가되었습니다` };
+  const dupMsg = skippedDup ? ` (중복 ${skippedDup}명 제외)` : "";
+  return added
+    ? { success: true, added, msg: `${added}명의 학생이 추가되었습니다${dupMsg}` }
+    : { success: true, added, msg: `추가된 학생이 없습니다${dupMsg} — 이미 모두 등록되어 있어요` };
 }
 
 function parseNEISFile(content) {
-  // CSV 파싱
-  const lines = content.split('\n').filter(l => l.trim());
-  if (lines.length < 2) return { success: false, msg: "파일이 비어있습니다" };
+  const lines = content.split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return { success: false, msg: "파일이 비어있습니다" };
+  return parseNEISData(lines.map((line) => line.split(",")));
+}
 
-  const data = lines.map(line => line.split(',').map(c => c.trim()));
-  return parseNEISData(data);
+// XLSX 라이브러리 보장 (CDN 차단/로드 실패 대비 2차 소스 폴백)
+function ensureXLSX() {
+  if (typeof XLSX !== "undefined") return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("엑셀 처리 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요."));
+    document.head.appendChild(s);
+  });
 }
 
 // ============================================================
@@ -1868,49 +1907,58 @@ function bindEventsNew() {
   });
 
   // 학생 - NEIS 파일 업로드 (CSV / Excel)
-  $("neis-import-btn")?.addEventListener("click", () => {
+  $("neis-import-btn")?.addEventListener("click", async () => {
     const file = $("neis-file")?.files?.[0];
     if (!file) { toast("파일을 선택해 주세요"); return; }
 
     const resultDiv = $("import-result");
-    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const showResult = (result) => {
+      if (resultDiv) {
+        resultDiv.classList.remove("hidden", "success", "error");
+        resultDiv.classList.add(result.success ? "success" : "error");
+        resultDiv.textContent = `${result.success ? "✅" : "❌"} ${result.msg}`;
+      }
+      if (result.success && result.added) {
+        renderStudents();
+        toast(result.msg);
+        setTimeout(() => { $("neis-file").value = ""; resultDiv?.classList.add("hidden"); }, 3000);
+      }
+    };
+
+    const lower = file.name.toLowerCase();
+    const isExcel = lower.endsWith(".xlsx") || lower.endsWith(".xls");
+
+    if (isExcel) {
+      try {
+        await ensureXLSX();   // CDN 실패 시 2차 소스에서 로드
+      } catch (err) {
+        showResult({ success: false, msg: err.message });
+        return;
+      }
+    }
 
     const reader = new FileReader();
     reader.onload = (e) => {
       let result;
       try {
         if (isExcel) {
-          // Excel 파일 파싱
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
           result = parseNEISData(rows);
         } else {
-          // CSV 파일 파싱
           result = parseNEISFile(e.target.result);
         }
       } catch (err) {
         result = { success: false, msg: `파일 읽기 오류: ${err.message}` };
       }
-
-      if (resultDiv) {
-        resultDiv.classList.remove("hidden", "success", "error");
-        resultDiv.classList.add(result.success ? "success" : "error");
-        resultDiv.innerHTML = `<strong>${result.success ? "✅" : "❌"}</strong> ${result.msg}`;
-      }
-      if (result.success) {
-        renderStudents();
-        setTimeout(() => { $("neis-file").value = ""; resultDiv.classList.add("hidden"); }, 2000);
-      }
+      showResult(result);
     };
+    reader.onerror = () => showResult({ success: false, msg: "파일을 읽을 수 없습니다" });
 
-    if (isExcel) {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.readAsText(file);
-    }
+    if (isExcel) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
   });
 
   // 설정
