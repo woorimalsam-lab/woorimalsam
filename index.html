@@ -9,7 +9,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">🗓️ 내 일정 · 메모</div>
+    <div class="brand">🗓️ <span>내 일정·메모</span></div>
     <div class="account">
       <button id="theme-btn" class="btn btn-ghost btn-icon" title="다크 모드 전환">🌙</button>
       <span id="mode-badge" class="badge">로컬 저장 모드</span>
@@ -19,63 +19,111 @@
     </div>
   </header>
 
-  <main class="layout">
-    <!-- 일정(캘린더) -->
-    <section class="panel calendar-panel">
-      <div class="panel-head">
-        <div class="cal-nav">
-          <button id="prev-month" class="btn btn-icon" title="이전 달">‹</button>
-          <h2 id="cal-title">2026년 7월</h2>
-          <button id="next-month" class="btn btn-icon" title="다음 달">›</button>
+  <nav class="tabbar" id="tabbar">
+    <button class="navbtn active" data-view="home"><span class="navicon">🏠</span>홈</button>
+    <button class="navbtn" data-view="calendar"><span class="navicon">📅</span>달력</button>
+    <button class="navbtn" data-view="memo"><span class="navicon">📝</span>메모</button>
+  </nav>
+
+  <main class="main">
+    <!-- ============ 홈(대시보드) ============ -->
+    <section id="view-home" class="view">
+      <div class="dash-greeting">
+        <h2 id="greeting">안녕하세요 👋</h2>
+        <p id="greeting-date" class="muted"></p>
+      </div>
+
+      <div class="dash-grid">
+        <!-- D-Day -->
+        <div class="dash-card">
+          <div class="dash-card-head"><span>📌 다가오는 일정</span></div>
+          <div id="dday-list" class="dday-list"></div>
         </div>
-        <button id="today-btn" class="btn btn-ghost">오늘</button>
-      </div>
 
-      <div class="legend" id="legend">
-        <button class="chip chip-personal active" data-cat="personal"><span class="chip-dot"></span>개인</button>
-        <button class="chip chip-work active" data-cat="work"><span class="chip-dot"></span>업무</button>
-        <button class="chip chip-subject active" data-cat="subject"><span class="chip-dot"></span>교과</button>
-        <button class="chip chip-academic active" data-cat="academic"><span class="chip-dot"></span>학사</button>
-      </div>
+        <!-- 오늘 일정 -->
+        <div class="dash-card">
+          <div class="dash-card-head">
+            <span>📅 오늘 일정</span>
+            <button class="linkbtn" data-goto="calendar">달력 &rsaquo;</button>
+          </div>
+          <ul id="today-events" class="today-events"></ul>
+        </div>
 
-      <div class="weekday-row">
-        <span class="sun">일</span><span>월</span><span>화</span><span>수</span>
-        <span>목</span><span>금</span><span class="sat">토</span>
-      </div>
-      <div id="calendar-grid" class="calendar-grid"></div>
-
-      <div class="day-detail">
-        <h3 id="day-detail-title">날짜를 선택하세요</h3>
-        <ul id="event-list" class="event-list"></ul>
-        <button id="add-event-btn" class="btn btn-primary hidden">+ 일정 추가</button>
+        <!-- 오늘의 할 일 -->
+        <div class="dash-card dash-todo">
+          <div class="dash-card-head">
+            <span>✅ 할 일</span>
+            <span id="todo-progress" class="muted"></span>
+          </div>
+          <div class="todo-input">
+            <input id="todo-text" type="text" placeholder="할 일을 입력하고 Enter" />
+            <button id="add-todo-btn" class="btn btn-primary btn-sm">추가</button>
+          </div>
+          <ul id="todo-list" class="todo-list"></ul>
+        </div>
       </div>
     </section>
 
-    <!-- 메모 -->
-    <section class="panel memo-panel">
-      <div class="panel-head">
-        <h2>메모</h2>
-        <span id="memo-count" class="muted"></span>
-      </div>
-
-      <div class="memo-search-wrap">
-        <span class="memo-search-icon">🔍</span>
-        <input id="memo-search" class="memo-search" type="text" placeholder="메모 검색" />
-        <button id="memo-search-clear" class="memo-search-clear hidden" title="지우기">✕</button>
-      </div>
-
-      <div class="memo-compose">
-        <textarea id="memo-text" rows="2" placeholder="메모 작성..."></textarea>
-        <div class="memo-compose-tools">
-          <div class="memo-cat-row">
-            <select id="memo-category" class="memo-cat-select" title="항목(라벨)"></select>
-            <button id="add-memo-cat" class="btn btn-ghost btn-sm" title="새 항목 만들기">＋ 항목</button>
+    <!-- ============ 달력 ============ -->
+    <section id="view-calendar" class="view hidden">
+      <div class="panel calendar-panel">
+        <div class="panel-head">
+          <div class="cal-nav">
+            <button id="prev-month" class="btn btn-icon" title="이전 달">‹</button>
+            <h2 id="cal-title">2026년 7월</h2>
+            <button id="next-month" class="btn btn-icon" title="다음 달">›</button>
           </div>
-          <button id="add-memo-btn" class="btn btn-primary btn-sm">추가</button>
+          <button id="today-btn" class="btn btn-ghost">오늘</button>
+        </div>
+
+        <div class="legend" id="legend">
+          <button class="chip chip-personal active" data-cat="personal"><span class="chip-dot"></span>개인</button>
+          <button class="chip chip-work active" data-cat="work"><span class="chip-dot"></span>업무</button>
+          <button class="chip chip-subject active" data-cat="subject"><span class="chip-dot"></span>교과</button>
+          <button class="chip chip-academic active" data-cat="academic"><span class="chip-dot"></span>학사</button>
+        </div>
+
+        <div class="weekday-row">
+          <span class="sun">일</span><span>월</span><span>화</span><span>수</span>
+          <span>목</span><span>금</span><span class="sat">토</span>
+        </div>
+        <div id="calendar-grid" class="calendar-grid"></div>
+
+        <div class="day-detail">
+          <h3 id="day-detail-title">날짜를 선택하세요</h3>
+          <ul id="event-list" class="event-list"></ul>
+          <button id="add-event-btn" class="btn btn-primary hidden">+ 일정 추가</button>
         </div>
       </div>
+    </section>
 
-      <div id="memo-list" class="memo-list"></div>
+    <!-- ============ 메모 ============ -->
+    <section id="view-memo" class="view hidden">
+      <div class="panel memo-panel">
+        <div class="panel-head">
+          <h2>메모</h2>
+          <span id="memo-count" class="muted"></span>
+        </div>
+
+        <div class="memo-search-wrap">
+          <span class="memo-search-icon">🔍</span>
+          <input id="memo-search" class="memo-search" type="text" placeholder="메모 검색" />
+          <button id="memo-search-clear" class="memo-search-clear hidden" title="지우기">✕</button>
+        </div>
+
+        <div class="memo-compose">
+          <textarea id="memo-text" rows="2" placeholder="메모 작성..."></textarea>
+          <div class="memo-compose-tools">
+            <div class="memo-cat-row">
+              <select id="memo-category" class="memo-cat-select" title="항목(라벨)"></select>
+              <button id="add-memo-cat" class="btn btn-ghost btn-sm" title="새 항목 만들기">＋ 항목</button>
+            </div>
+            <button id="add-memo-btn" class="btn btn-primary btn-sm">추가</button>
+          </div>
+        </div>
+
+        <div id="memo-list" class="memo-list"></div>
+      </div>
     </section>
   </main>
 

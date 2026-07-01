@@ -31,7 +31,11 @@ const state = {
   memoCats: [],            // 메모 항목(카테고리) 목록
   memoSearch: "",          // 메모 검색어
   paletteFor: null,        // 색상 팔레트가 열린 메모 id
+  todos: [],               // 할 일 목록
+  activeView: "home",      // 현재 탭 (home/calendar/memo)
 };
+
+const LOCAL_TODOS_KEY = "myplanner.todos";
 
 // 메모 항목 관련
 const DEFAULT_MEMO_CATS = ["수업", "업무", "개인"];
@@ -177,6 +181,7 @@ async function refreshEvents() {
   }
   renderCalendar();
   if (state.selected) renderDayDetail();
+  if (state.activeView === "home") renderTodayEvents();
 }
 
 // 학사일정(해당 달) — 읽기 전용 레이어
@@ -758,6 +763,7 @@ async function initFirebase() {
       state.synced = true;
       subscribeMemos();
       subscribeEvents();
+      subscribeTodos();
       refreshEvents();
       // 로그인/세션복원 어느 경우든, 이 기기의 로컬 데이터가 있으면 1회 업로드 제안
       if (!migrationChecked) {
@@ -770,9 +776,12 @@ async function initFirebase() {
       migrationChecked = false;
       if (memoUnsub) { memoUnsub(); memoUnsub = null; }
       if (eventsUnsub) { eventsUnsub(); eventsUnsub = null; }
+      if (todosUnsub) { todosUnsub(); todosUnsub = null; }
       subscribeMemos();   // 로컬 메모로 폴백
+      subscribeTodos();
       refreshEvents();
     }
+    if (state.activeView === "home") renderDashboard();
   });
 
   // 리디렉션 로그인으로 돌아온 경우 환영 메시지
@@ -835,20 +844,21 @@ async function login() {
   }
 }
 
-// 로그인 시, 이 기기에만 있던 로컬 메모·일정을 클라우드로 올림
+// 로그인 시, 이 기기에만 있던 로컬 메모·일정·할 일을 클라우드로 올림
 async function maybeMigrateLocal(user) {
   const localMemos = loadLocal(LOCAL_MEMOS_KEY);
   const localEvents = loadLocal(LOCAL_EVENTS_KEY);
-  if (!localMemos.length && !localEvents.length) return;
+  const localTodos = loadLocal(LOCAL_TODOS_KEY);
+  if (!localMemos.length && !localEvents.length && !localTodos.length) return;
 
   const ok = confirm(
-    `이 기기에만 저장된 메모 ${localMemos.length}개, 일정 ${localEvents.length}개가 있습니다.\n` +
+    `이 기기에만 저장된 메모 ${localMemos.length}개, 일정 ${localEvents.length}개, 할 일 ${localTodos.length}개가 있습니다.\n` +
     `내 계정(클라우드)으로 올려서 다른 기기에서도 보이게 할까요?`
   );
   if (!ok) return;
 
   const { addDoc, collection, Timestamp } = fb.fs;
-  let memoOk = 0, evOk = 0;
+  let memoOk = 0, evOk = 0, todoOk = 0;
 
   // 메모 → Firestore (작성 시각 유지)
   for (const m of localMemos) {
@@ -870,11 +880,24 @@ async function maybeMigrateLocal(user) {
     catch (e) { console.error("일정 업로드 실패", e); }
   }
 
+  // 할 일 → Firestore
+  for (const t of localTodos) {
+    try {
+      await addDoc(collection(fb.db, "users", user.uid, "todos"), {
+        text: t.text,
+        done: !!t.done,
+        createdAt: Timestamp.fromMillis(t.createdAt || Date.now()),
+      });
+      todoOk++;
+    } catch (e) { console.error("할 일 업로드 실패", e); }
+  }
+
   // 성공적으로 올라간 만큼 로컬에서 정리(중복 방지)
   if (memoOk === localMemos.length) saveLocal(LOCAL_MEMOS_KEY, []);
   if (evOk === localEvents.length) saveLocal(LOCAL_EVENTS_KEY, []);
+  if (todoOk === localTodos.length) saveLocal(LOCAL_TODOS_KEY, []);
 
-  toast(`클라우드로 올렸습니다 (메모 ${memoOk}개, 일정 ${evOk}개)`);
+  toast(`클라우드로 올렸습니다 (메모 ${memoOk}, 일정 ${evOk}, 할 일 ${todoOk})`);
 }
 
 async function logout() {
@@ -898,6 +921,218 @@ function updateAccountUI() {
     badge.textContent = isConfigured ? "로그인 필요" : "로컬 저장 모드";
     badge.classList.remove("synced");
   }
+}
+
+// ============================================================
+//  대시보드 (홈) — D-Day / 오늘 일정 / 요약
+// ============================================================
+function dateDiffDays(fromStr, toStr) {
+  const [y1, m1, d1] = fromStr.split("-").map(Number);
+  const [y2, m2, d2] = toStr.split("-").map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+}
+function fmtDdayDate(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][new Date(y, m - 1, d).getDay()];
+  return `${m}월 ${d}일 (${wd})`;
+}
+
+// 다가오는 학사일정 D-Day (제목별 최근접 1개)
+function upcomingDdays(limit = 6) {
+  const today = todayStr();
+  const byTitle = new Map();
+  for (const a of academicEvents) {
+    if (a.date < today) continue;
+    const prev = byTitle.get(a.title);
+    if (!prev || a.date < prev.date) byTitle.set(a.title, a);
+  }
+  return [...byTitle.values()]
+    .sort((x, y) => x.date.localeCompare(y.date))
+    .slice(0, limit)
+    .map((a) => ({ ...a, dday: dateDiffDays(today, a.date) }));
+}
+
+function renderDday() {
+  const box = $("dday-list");
+  box.innerHTML = "";
+  const items = upcomingDdays(6);
+  if (!items.length) { box.appendChild(emptyNote("다가오는 학사일정이 없습니다.")); return; }
+  for (const it of items) {
+    const row = document.createElement("div");
+    row.className = "dday-item";
+    const badge = document.createElement("div");
+    badge.className = "dday-badge" + (it.dday <= 7 ? " soon" : "");
+    badge.textContent = it.dday === 0 ? "D-DAY" : `D-${it.dday}`;
+    const info = document.createElement("div");
+    info.className = "dday-info";
+    const t = document.createElement("div"); t.className = "dday-title"; t.textContent = it.title;
+    const d = document.createElement("div"); d.className = "dday-date"; d.textContent = fmtDdayDate(it.date);
+    info.append(t, d);
+    row.append(badge, info);
+    box.appendChild(row);
+  }
+}
+
+// 오늘 일정 (학사 + 내 일정)
+function todaysEvents() {
+  const today = todayStr();
+  const list = [];
+  for (const a of academicEvents) {
+    if (a.date === today) list.push({ title: a.title, allDay: true, start: null, category: "academic", holiday: a.holiday });
+  }
+  const userEv = (state.synced && fb) ? state.allEvents : loadLocal(LOCAL_EVENTS_KEY);
+  for (const e of userEv) {
+    if (e.date === today) list.push({ ...e, category: e.category || "work" });
+  }
+  list.sort((a, b) => {
+    const rank = (x) => (x.category === "academic" ? 0 : 1);
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    return (a.start || "").localeCompare(b.start || "");
+  });
+  return list;
+}
+
+function renderTodayEvents() {
+  const ul = $("today-events");
+  ul.innerHTML = "";
+  const evs = todaysEvents();
+  if (!evs.length) { ul.appendChild(emptyNote("오늘 일정이 없습니다.")); return; }
+  for (const ev of evs) {
+    const li = document.createElement("li");
+    const isAca = ev.category === "academic";
+    const cls = isAca ? (ev.holiday ? "cat-holiday" : "cat-academic") : `cat-${ev.category}`;
+    li.className = `today-ev ${cls}`;
+    const time = document.createElement("span");
+    time.className = "t-time";
+    time.textContent = (ev.allDay || !ev.start) ? "종일" : ev.start;
+    const title = document.createElement("span");
+    title.className = "t-title";
+    title.textContent = ev.title;
+    li.append(time, title);
+    ul.appendChild(li);
+  }
+}
+
+function renderDashboard() {
+  const now = new Date();
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][now.getDay()];
+  const name = state.user?.displayName ? state.user.displayName.split(" ")[0] : "";
+  $("greeting").textContent = name ? `안녕하세요, ${name}님 👋` : "안녕하세요 👋";
+  $("greeting-date").textContent = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${wd})`;
+  renderDday();
+  renderTodayEvents();
+  renderTodos();
+}
+
+// ============================================================
+//  할 일 (체크리스트)
+// ============================================================
+let todosUnsub = null;
+function loadLocalTodos() {
+  return loadLocal(LOCAL_TODOS_KEY).sort((a, b) => (a.done - b.done) || (b.createdAt - a.createdAt));
+}
+
+async function addTodo() {
+  const input = $("todo-text");
+  const text = input.value.trim();
+  if (!text) return;
+  if (state.synced && fb) {
+    const { addDoc, collection, serverTimestamp } = fb.fs;
+    await addDoc(collection(fb.db, "users", state.user.uid, "todos"), { text, done: false, createdAt: serverTimestamp() });
+  } else {
+    const todos = loadLocal(LOCAL_TODOS_KEY);
+    todos.push({ id: uid(), text, done: false, createdAt: Date.now() });
+    saveLocal(LOCAL_TODOS_KEY, todos);
+    state.todos = loadLocalTodos();
+    renderTodos();
+  }
+  input.value = "";
+}
+
+async function toggleTodo(id, done) {
+  if (state.synced && fb) {
+    const { updateDoc, doc } = fb.fs;
+    await updateDoc(doc(fb.db, "users", state.user.uid, "todos", id), { done: !done });
+  } else {
+    const todos = loadLocal(LOCAL_TODOS_KEY);
+    const t = todos.find((x) => x.id === id);
+    if (t) { t.done = !done; saveLocal(LOCAL_TODOS_KEY, todos); }
+    state.todos = loadLocalTodos();
+    renderTodos();
+  }
+}
+
+async function removeTodo(id) {
+  if (state.synced && fb) {
+    const { deleteDoc, doc } = fb.fs;
+    await deleteDoc(doc(fb.db, "users", state.user.uid, "todos", id));
+  } else {
+    saveLocal(LOCAL_TODOS_KEY, loadLocal(LOCAL_TODOS_KEY).filter((t) => t.id !== id));
+    state.todos = loadLocalTodos();
+    renderTodos();
+  }
+}
+
+function subscribeTodos() {
+  if (!(state.synced && fb)) {
+    state.todos = loadLocalTodos();
+    renderTodos();
+    return;
+  }
+  const { collection, onSnapshot } = fb.fs;
+  if (todosUnsub) todosUnsub();
+  todosUnsub = onSnapshot(collection(fb.db, "users", state.user.uid, "todos"), (snap) => {
+    state.todos = snap.docs
+      .map((d) => {
+        const x = d.data();
+        return { id: d.id, text: x.text, done: !!x.done, createdAt: x.createdAt?.toMillis ? x.createdAt.toMillis() : Date.now() };
+      })
+      .sort((a, b) => (a.done - b.done) || (b.createdAt - a.createdAt));
+    renderTodos();
+  });
+}
+
+function renderTodos() {
+  const ul = $("todo-list");
+  if (!ul) return;
+  ul.innerHTML = "";
+  const total = state.todos.length;
+  const done = state.todos.filter((t) => t.done).length;
+  $("todo-progress").textContent = total ? `${done}/${total} 완료` : "";
+  if (!total) { ul.appendChild(emptyNote("할 일을 추가해 보세요.")); return; }
+  for (const t of state.todos) {
+    const li = document.createElement("li");
+    li.className = "todo-item" + (t.done ? " done" : "");
+    const check = document.createElement("button");
+    check.className = "todo-check";
+    check.textContent = t.done ? "✓" : "";
+    check.title = t.done ? "완료 취소" : "완료";
+    check.addEventListener("click", () => toggleTodo(t.id, t.done));
+    const text = document.createElement("span");
+    text.className = "todo-text";
+    text.textContent = t.text;
+    const del = document.createElement("button");
+    del.className = "todo-del";
+    del.textContent = "✕";
+    del.title = "삭제";
+    del.addEventListener("click", () => removeTodo(t.id));
+    li.append(check, text, del);
+    ul.appendChild(li);
+  }
+}
+
+// ============================================================
+//  탭(뷰) 전환
+// ============================================================
+function setView(name) {
+  state.activeView = name;
+  for (const v of ["home", "calendar", "memo"]) {
+    $("view-" + v).classList.toggle("hidden", v !== name);
+  }
+  $("tabbar").querySelectorAll(".navbtn").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  if (name === "home") renderDashboard();
+  if (name === "calendar") { renderCalendar(); if (state.selected) renderDayDetail(); }
+  window.scrollTo(0, 0);
 }
 
 // ============================================================
@@ -966,6 +1201,18 @@ function bindEvents() {
   $("login-btn").addEventListener("click", login);
   $("logout-btn").addEventListener("click", logout);
 
+  // 탭 전환
+  $("tabbar").querySelectorAll(".navbtn").forEach((b) => {
+    b.addEventListener("click", () => setView(b.dataset.view));
+  });
+  document.querySelectorAll("[data-goto]").forEach((b) => {
+    b.addEventListener("click", () => setView(b.dataset.goto));
+  });
+
+  // 할 일
+  $("add-todo-btn").addEventListener("click", addTodo);
+  $("todo-text").addEventListener("keydown", (e) => { if (e.key === "Enter") addTodo(); });
+
   $("add-memo-btn").addEventListener("click", addMemo);
   $("add-memo-cat").addEventListener("click", addMemoCategory);
   $("memo-text").addEventListener("keydown", (e) => {
@@ -1006,14 +1253,17 @@ async function start() {
       toast("Firebase 설정을 확인하세요. 로컬 모드로 전환합니다.");
       state.synced = false;
       subscribeMemos();
+      subscribeTodos();
       await refreshEvents();
     }
   } else {
     // 로컬 모드
     subscribeMemos();
+    subscribeTodos();
     await refreshEvents();
   }
   renderDayDetail();
+  setView("home");   // 기본 화면: 대시보드
 }
 
 start();
