@@ -32,10 +32,22 @@ const state = {
   memoSearch: "",          // 메모 검색어
   paletteFor: null,        // 색상 팔레트가 열린 메모 id
   todos: [],               // 할 일 목록
-  activeView: "home",      // 현재 탭 (home/calendar/memo)
+  activeView: "home",      // 현재 탭 (home/calendar/memo/...)
+  timetable: { mon: [], tue: [], wed: [], thu: [], fri: [] },
+  seating: { rows: 6, cols: 8, grid: [] },
+  students: [],
+  settings: { school: "", grade: "", teacher: "" },
+  timerInterval: null,
+  timerTime: 0,
+  stopwatchInterval: null,
+  stopwatchTime: 0,
 };
 
 const LOCAL_TODOS_KEY = "myplanner.todos";
+const LOCAL_TIMETABLE_KEY = "myplanner.timetable";
+const LOCAL_SEATING_KEY = "myplanner.seating";
+const LOCAL_STUDENTS_KEY = "myplanner.students";
+const LOCAL_SETTINGS_KEY = "myplanner.settings";
 
 // 메모 항목 관련
 const DEFAULT_MEMO_CATS = ["수업", "업무", "개인"];
@@ -1239,11 +1251,410 @@ function bindEvents() {
   });
 }
 
+// ============================================================
+//  시간표
+// ============================================================
+function loadTimetable() {
+  state.timetable = loadLocal(LOCAL_TIMETABLE_KEY) || { mon: [], tue: [], wed: [], thu: [], fri: [] };
+}
+function saveTimetable() {
+  saveLocal(LOCAL_TIMETABLE_KEY, state.timetable);
+  renderTimetable();
+}
+function renderTimetable() {
+  const display = $("timetable-display");
+  if (!display) return;
+  const days = ["월", "화", "수", "목", "금"];
+  const dayKeys = ["mon", "tue", "wed", "thu", "fri"];
+  let html = '<table class="timetable-grid"><thead><tr><th>교시</th>';
+  days.forEach(d => html += `<th>${d}</th>`);
+  html += '</tr></thead><tbody>';
+  const maxPeriods = Math.max(...dayKeys.map(k => state.timetable[k]?.length || 0), 6);
+  for (let p = 0; p < maxPeriods; p++) {
+    html += `<tr><td>${p + 1}</td>`;
+    dayKeys.forEach(k => {
+      const subj = state.timetable[k]?.[p] || "";
+      html += `<td>${subj}</td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  display.innerHTML = html;
+
+  const todayIdx = new Date().getDay() - 1;
+  if (todayIdx >= 0 && todayIdx < 5) {
+    const todayTt = $("today-timetable");
+    if (todayTt) {
+      const today = state.timetable[dayKeys[todayIdx]] || [];
+      if (today.length) {
+        todayTt.innerHTML = today.map((s, i) => `<div class="today-timetable-item">${i + 1}교시: ${s}</div>`).join("");
+      } else {
+        todayTt.innerHTML = '<div class="today-timetable-empty">오늘 수업이 없습니다</div>';
+      }
+    }
+  }
+}
+function renderTimetableEditor() {
+  const grid = $("timetable-grid");
+  if (!grid) return;
+  const periods = parseInt($("tt-periods").value) || 6;
+  const days = ["mon", "tue", "wed", "thu", "fri"];
+  const dayLabels = ["월", "화", "수", "목", "금"];
+  let html = '<thead><tr><th>교시</th>';
+  dayLabels.forEach(d => html += `<th>${d}</th>`);
+  html += '</tr></thead><tbody>';
+  for (let p = 0; p < periods; p++) {
+    html += `<tr><td>${p + 1}</td>`;
+    days.forEach((d, idx) => {
+      const val = state.timetable[d]?.[p] || "";
+      html += `<td><input type="text" data-day="${d}" data-period="${p}" value="${val}" /></td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody>';
+  grid.innerHTML = html;
+}
+
+// ============================================================
+//  자리배치
+// ============================================================
+function loadSeating() {
+  state.seating = loadLocal(LOCAL_SEATING_KEY) || { rows: 6, cols: 8, grid: [] };
+  if (!state.seating.grid.length) initSeatingGrid();
+}
+function initSeatingGrid() {
+  state.seating.grid = Array(state.seating.rows).fill(null).map(() => Array(state.seating.cols).fill(""));
+}
+function saveSeating() {
+  saveLocal(LOCAL_SEATING_KEY, state.seating);
+}
+function renderSeating() {
+  const display = $("seating-display");
+  if (!display) return;
+  const students = state.students.map(s => s.name);
+  let html = '<div class="seating-grid">';
+  let idx = 0;
+  for (let r = 0; r < state.seating.rows; r++) {
+    for (let c = 0; c < state.seating.cols; c++) {
+      const name = state.seating.grid[r]?.[c] || "";
+      html += `<div class="seating-seat" data-row="${r}" data-col="${c}">${name ? name[0] : `${r}-${c}`}</div>`;
+    }
+  }
+  html += '</div>';
+  display.innerHTML = html;
+}
+function randomSeating() {
+  const students = state.students.map(s => s.name).slice();
+  for (let i = students.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [students[i], students[j]] = [students[j], students[i]];
+  }
+  initSeatingGrid();
+  let idx = 0;
+  for (let r = 0; r < state.seating.rows && idx < students.length; r++) {
+    for (let c = 0; c < state.seating.cols && idx < students.length; c++) {
+      state.seating.grid[r][c] = students[idx++];
+    }
+  }
+  saveSeating();
+  renderSeating();
+  toast(`${students.length}명 자리배치 완료`);
+}
+
+// ============================================================
+//  학생 기록
+// ============================================================
+function loadStudents() {
+  state.students = loadLocal(LOCAL_STUDENTS_KEY) || [];
+}
+function saveStudents() {
+  saveLocal(LOCAL_STUDENTS_KEY, state.students);
+}
+function addStudent() {
+  const name = $("student-name")?.value?.trim();
+  if (!name) return;
+  const id = uid();
+  state.students.push({ id, name, notes: "", date: new Date().toISOString() });
+  saveStudents();
+  renderStudents();
+  $("student-name").value = "";
+}
+function removeStudent(id) {
+  state.students = state.students.filter(s => s.id !== id);
+  saveStudents();
+  renderStudents();
+}
+function updateStudentNotes(id, notes) {
+  const s = state.students.find(x => x.id === id);
+  if (s) { s.notes = notes; saveStudents(); }
+}
+function renderStudents() {
+  const list = $("students-list");
+  if (!list) return;
+  if (!state.students.length) { list.innerHTML = '<p style="text-align:center; color: var(--muted); padding: 20px;">학생을 추가해 주세요.</p>'; return; }
+  list.innerHTML = state.students.map(s => `
+    <div class="student-card">
+      <div class="student-header">
+        <span>${s.name}</span>
+        <button class="btn btn-danger btn-sm" onclick="removeStudent('${s.id}')">삭제</button>
+      </div>
+      <textarea placeholder="메모..." onchange="updateStudentNotes('${s.id}', this.value)" style="width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px;">${s.notes}</textarea>
+    </div>
+  `).join("");
+}
+
+// ============================================================
+//  설정
+// ============================================================
+function loadSettings() {
+  state.settings = loadLocal(LOCAL_SETTINGS_KEY) || { school: "", grade: "", teacher: "" };
+  $("setting-school").value = state.settings.school || "";
+  $("setting-grade").value = state.settings.grade || "";
+  $("setting-teacher").value = state.settings.teacher || "";
+}
+function saveSettings() {
+  state.settings = {
+    school: $("setting-school").value,
+    grade: $("setting-grade").value,
+    teacher: $("setting-teacher").value
+  };
+  saveLocal(LOCAL_SETTINGS_KEY, state.settings);
+  toast("설정이 저장되었습니다.");
+}
+function exportData() {
+  const data = {
+    memos: loadLocal(LOCAL_MEMOS_KEY),
+    events: loadLocal(LOCAL_EVENTS_KEY),
+    todos: loadLocal(LOCAL_TODOS_KEY),
+    timetable: loadLocal(LOCAL_TIMETABLE_KEY),
+    seating: loadLocal(LOCAL_SEATING_KEY),
+    students: loadLocal(LOCAL_STUDENTS_KEY),
+    settings: loadLocal(LOCAL_SETTINGS_KEY),
+    memoCats: loadLocal(LOCAL_MEMOCATS_KEY)
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `내교실_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  toast("데이터 다운로드 완료");
+}
+function importData() {
+  $("import-file").click();
+}
+
+// ============================================================
+//  도구 — 타이머
+// ============================================================
+function startTimer() {
+  if (state.timerInterval) return;
+  state.timerTime = parseInt($("timer-input").value) || 300;
+  state.timerInterval = setInterval(() => {
+    state.timerTime--;
+    const m = Math.floor(state.timerTime / 60), s = state.timerTime % 60;
+    $("timer-display").textContent = `${pad(m)}:${pad(s)}`;
+    if (state.timerTime <= 0) {
+      clearInterval(state.timerInterval);
+      state.timerInterval = null;
+      toast("⏱️ 시간 완료!");
+      $("timer-display").textContent = "00:00";
+      $("timer-start-btn").classList.remove("hidden");
+      $("timer-stop-btn").classList.add("hidden");
+    }
+  }, 1000);
+  $("timer-start-btn").classList.add("hidden");
+  $("timer-stop-btn").classList.remove("hidden");
+}
+function stopTimer() {
+  if (state.timerInterval) {
+    clearInterval(state.timerInterval);
+    state.timerInterval = null;
+  }
+  $("timer-start-btn").classList.remove("hidden");
+  $("timer-stop-btn").classList.add("hidden");
+}
+function resetTimer() {
+  stopTimer();
+  $("timer-display").textContent = "00:00";
+  $("timer-input").value = 300;
+}
+
+// ============================================================
+//  도구 — 스톱워치
+// ============================================================
+function startStopwatch() {
+  if (state.stopwatchInterval) return;
+  state.stopwatchInterval = setInterval(() => {
+    state.stopwatchTime++;
+    const m = Math.floor(state.stopwatchTime / 60), s = state.stopwatchTime % 60;
+    $("stopwatch-display").textContent = `${pad(m)}:${pad(s)}`;
+  }, 100);
+  $("stopwatch-start-btn").classList.add("hidden");
+  $("stopwatch-stop-btn").classList.remove("hidden");
+}
+function stopStopwatch() {
+  if (state.stopwatchInterval) {
+    clearInterval(state.stopwatchInterval);
+    state.stopwatchInterval = null;
+  }
+  $("stopwatch-start-btn").classList.remove("hidden");
+  $("stopwatch-stop-btn").classList.add("hidden");
+}
+function resetStopwatch() {
+  stopStopwatch();
+  state.stopwatchTime = 0;
+  $("stopwatch-display").textContent = "00:00";
+}
+
+// ============================================================
+//  도구 — 주사위, 투표, 번호뽑기, 가위바위보
+// ============================================================
+function rollDice() {
+  const count = parseInt($("dice-count").value) || 1;
+  let result = 0;
+  for (let i = 0; i < count; i++) result += Math.floor(Math.random() * 6) + 1;
+  $("dice-display").textContent = result;
+  toast(`🎲 ${count}개 주사위: 합 ${result}`);
+}
+function createVote() {
+  const input = $("vote-option").value.split(",").map(s => s.trim()).filter(s => s);
+  if (!input.length) { toast("선택지를 입력하세요"); return; }
+  const display = $("vote-display");
+  display.innerHTML = input.map((opt, i) => `
+    <div class="vote-option">
+      <span class="vote-option-text">${opt}</span>
+      <div class="vote-option-bar" style="width: 0%"></div>
+      <span style="min-width: 30px; text-align: right;">0명</span>
+    </div>
+  `).join("");
+  $("vote-option").value = "";
+}
+function pickNumber() {
+  const min = parseInt($("numberpick-min").value) || 1;
+  const max = parseInt($("numberpick-max").value) || 30;
+  const picked = Math.floor(Math.random() * (max - min + 1)) + min;
+  $("numberpick-result").innerHTML = `<div style="font-size: 3rem; font-weight: 700; color: var(--primary); text-align: center; padding: 30px;">${picked}</div>`;
+  toast(`🎯 ${picked}번이 선택되었습니다`);
+}
+function playRPS(choice) {
+  const choices = ["rock", "paper", "scissors"];
+  const comp = choices[Math.floor(Math.random() * 3)];
+  const icons = { rock: "✊", paper: "✋", scissors: "✌️" };
+  const result = (choice === comp) ? "무승부" :
+    (choice === "rock" && comp === "scissors") ||
+    (choice === "paper" && comp === "rock") ||
+    (choice === "scissors" && comp === "paper") ? "승리" : "패배";
+  $("rps-display").innerHTML = `
+    <div style="font-size: 2rem;">${icons[choice]} vs ${icons[comp]}</div>
+    <div style="font-size: 1.5rem; margin-top: 10px; color: var(--primary);">${result}</div>
+  `;
+}
+
+// 새로운 이벤트 바인딩 추가
+function bindEventsNew() {
+  // 시간표
+  $("edit-timetable-btn")?.addEventListener("click", () => {
+    $("timetable-editor").classList.toggle("hidden");
+    renderTimetableEditor();
+  });
+  $("save-timetable-btn")?.addEventListener("click", () => {
+    const inputs = $("timetable-grid").querySelectorAll("input");
+    inputs.forEach(inp => {
+      const day = inp.dataset.day, period = parseInt(inp.dataset.period);
+      if (!state.timetable[day]) state.timetable[day] = [];
+      state.timetable[day][period] = inp.value;
+    });
+    $("timetable-editor").classList.add("hidden");
+    saveTimetable();
+    toast("시간표가 저장되었습니다");
+  });
+  $("cancel-timetable-btn")?.addEventListener("click", () => $("timetable-editor").classList.add("hidden"));
+
+  // 자리배치
+  $("random-seating-btn")?.addEventListener("click", randomSeating);
+  $("edit-seating-btn")?.addEventListener("click", () => $("seating-config").classList.toggle("hidden"));
+  $("create-seating-btn")?.addEventListener("click", () => {
+    state.seating.rows = parseInt($("seating-rows").value) || 6;
+    state.seating.cols = parseInt($("seating-cols").value) || 8;
+    initSeatingGrid();
+    saveSeating();
+    renderSeating();
+    $("seating-config").classList.add("hidden");
+  });
+
+  // 학생
+  $("add-student-btn")?.addEventListener("click", addStudent);
+  $("student-name")?.addEventListener("keydown", (e) => { if (e.key === "Enter") addStudent(); });
+
+  // 설정
+  $("save-settings-btn")?.addEventListener("click", saveSettings);
+  $("export-data-btn")?.addEventListener("click", exportData);
+  $("import-data-btn")?.addEventListener("click", importData);
+  $("import-file")?.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = JSON.parse(evt.target.result);
+        if (data.memos) saveLocal(LOCAL_MEMOS_KEY, data.memos);
+        if (data.events) saveLocal(LOCAL_EVENTS_KEY, data.events);
+        if (data.todos) saveLocal(LOCAL_TODOS_KEY, data.todos);
+        if (data.timetable) saveLocal(LOCAL_TIMETABLE_KEY, data.timetable);
+        if (data.seating) saveLocal(LOCAL_SEATING_KEY, data.seating);
+        if (data.students) saveLocal(LOCAL_STUDENTS_KEY, data.students);
+        if (data.settings) saveLocal(LOCAL_SETTINGS_KEY, data.settings);
+        toast("데이터 가져오기 완료! 페이지를 새로고침하세요.");
+      } catch (e) {
+        toast("파일 형식이 올바르지 않습니다");
+      }
+    };
+    reader.readAsText(file);
+  });
+  $("clear-local-btn")?.addEventListener("click", () => {
+    if (confirm("로컬 데이터를 모두 삭제하시겠습니까?")) {
+      localStorage.clear();
+      location.reload();
+    }
+  });
+
+  // 도구 - 타이머
+  $("timer-start-btn")?.addEventListener("click", startTimer);
+  $("timer-stop-btn")?.addEventListener("click", stopTimer);
+  $("timer-reset-btn")?.addEventListener("click", resetTimer);
+
+  // 도구 - 스톱워치
+  $("stopwatch-start-btn")?.addEventListener("click", startStopwatch);
+  $("stopwatch-stop-btn")?.addEventListener("click", stopStopwatch);
+  $("stopwatch-reset-btn")?.addEventListener("click", resetStopwatch);
+
+  // 도구 - 주사위
+  $("dice-roll-btn")?.addEventListener("click", rollDice);
+
+  // 도구 - 투표
+  $("vote-create-btn")?.addEventListener("click", createVote);
+
+  // 도구 - 번호뽑기
+  $("numberpick-btn")?.addEventListener("click", pickNumber);
+
+  // 도구 - 가위바위보
+  document.querySelectorAll("[data-rps]").forEach(btn => {
+    btn.addEventListener("click", () => playRPS(btn.dataset.rps));
+  });
+}
+
 async function start() {
   initTheme();
   bindEvents();
+  bindEventsNew();
   state.selected = todayStr();
   updateAccountUI();
+
+  // 각 기능 데이터 로드
+  loadTimetable();
+  loadSeating();
+  loadStudents();
+  loadSettings();
 
   if (isConfigured) {
     try {
@@ -1263,6 +1674,9 @@ async function start() {
     await refreshEvents();
   }
   renderDayDetail();
+  renderTimetable();
+  renderSeating();
+  renderStudents();
   setView("home");   // 기본 화면: 대시보드
 }
 

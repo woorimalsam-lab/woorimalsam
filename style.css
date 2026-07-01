@@ -612,4 +612,142 @@ body {
 
 /* 버튼 */
 [data-theme="dark"] .btn-ghost { background: transparent; }
+
+/* ============================================================
+   시간표, 자리배치, 학생, 도구, 설정
+============================================================ */
+
+/* 시간표 */
+.timetable-display { overflow-x: auto; margin-bottom: 16px; }
+.timetable-grid {
+  width: 100%; border-collapse: collapse;
+  border: 1px solid var(--line);
+  border-radius: 10px; overflow: hidden;
+}
+.timetable-grid th, .timetable-grid td {
+  border: 1px solid var(--line); padding: 12px;
+  text-align: center; font-size: 0.9rem;
+}
+.timetable-grid th { background: var(--accent-soft); font-weight: 700; }
+.timetable-grid tbody tr:nth-child(even) { background: #f9fafc; }
+.timetable-grid input {
+  border: none; background: transparent; width: 100%;
+  text-align: center; font-family: inherit; font-size: 0.85rem;
+}
+.timetable-grid input:focus { outline: 2px solid var(--primary); border-radius: 4px; }
+.timetable-editor { margin-top: 16px; padding: 16px; background: #fafbfe; border-radius: 12px; }
+.tt-controls { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+.tt-controls label { display: flex; align-items: center; gap: 8px; }
+.tt-controls input { width: 60px; }
+.today-timetable { font-size: 0.9rem; display: flex; flex-direction: column; gap: 4px; }
+.today-timetable-item { padding: 6px 8px; border-radius: 8px; border-left: 4px solid var(--primary); background: var(--accent-soft); }
+.today-timetable-empty { padding: 8px; color: var(--muted); }
+
+/* 자리배치 */
+.seating-config { margin-bottom: 16px; padding: 12px; background: #fafbfe; border-radius: 10px; }
+.seating-config label { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; }
+.seating-config input { width: 50px; }
+.seating-display { display: grid; gap: 8px; }
+.seating-grid {
+  display: grid; gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+}
+.seating-seat {
+  border: 2px solid var(--line); border-radius: 10px; padding: 8px;
+  text-align: center; font-size: 0.85rem; cursor: pointer;
+  background: var(--panel); transition: all 0.12s ease;
+}
+.seating-seat:hover { border-color: var(--primary); background: var(--accent-soft); }
+.seating-seat.selected { border-color: var(--primary); background: var(--primary); color: #fff; }
+
+/* 학생 기록 */
+.student-controls { display: flex; gap: 8px; margin-bottom: 16px; }
+.student-controls input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+.students-list { display: flex; flex-direction: column; gap: 10px; }
+.student-card {
+  border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+  background: var(--panel); cursor: pointer; transition: all 0.12s ease;
+}
+.student-card:hover { border-color: var(--primary); box-shadow: 0 2px 8px rgba(59,110,245,0.1); }
+.student-header { display: flex; justify-content: space-between; align-items: center; font-weight: 600; margin-bottom: 8px; }
+.student-notes { font-size: 0.85rem; color: var(--muted); margin-top: 8px; padding: 8px; background: #f9fafc; border-radius: 8px; }
+.student-notes-input { display: flex; gap: 6px; margin-top: 8px; }
+.student-notes-input textarea { flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 6px; font-size: 0.85rem; }
+
+/* 도구 */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.tool-card {
+  border: 1px solid var(--line); border-radius: 14px;
+  padding: 16px; background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.tool-card h3 { margin: 0 0 12px; font-size: 1rem; }
+.timer-display, .stopwatch-display, .dice-display, .numberpick-result, .rps-display {
+  font-size: 2.5rem; text-align: center; font-weight: 700;
+  padding: 20px; margin-bottom: 12px; background: var(--accent-soft); border-radius: 10px;
+}
+.timer-controls, .stopwatch-controls, .dice-controls, .rps-controls {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.timer-controls input, .dice-controls input {
+  width: 80px; padding: 6px; border: 1px solid var(--line); border-radius: 6px;
+}
+.vote-input { display: flex; gap: 8px; margin-bottom: 12px; }
+.vote-input input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.vote-display { display: flex; flex-direction: column; gap: 8px; }
+.vote-option {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px; border: 1px solid var(--line); border-radius: 8px;
+}
+.vote-option-bar { flex: 1; height: 24px; border-radius: 4px; background: var(--primary); }
+.vote-option-text { font-size: 0.85rem; min-width: 120px; }
+.numberpick-input { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.numberpick-input input { width: 60px; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+
+/* 설정 */
+.settings-section {
+  margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--line);
+}
+.settings-section h3 { margin: 0 0 12px; font-size: 1rem; font-weight: 600; }
+.settings-section label {
+  display: flex; flex-direction: column; margin-bottom: 10px;
+  gap: 6px; font-size: 0.9rem;
+}
+.settings-section input { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.settings-section p { margin: 4px 0; font-size: 0.9rem; color: var(--muted); }
+
+/* 다크모드 새로운 섹션 */
+[data-theme="dark"] .timetable-grid th { background: #2a2e38; }
+[data-theme="dark"] .timetable-grid tbody tr:nth-child(even) { background: #1a1f2b; }
+[data-theme="dark"] .timetable-grid input { color: var(--ink); }
+[data-theme="dark"] .timetable-editor { background: #1a1f2b; }
+[data-theme="dark"] .seating-config { background: #1a1f2b; }
+[data-theme="dark"] .seating-seat { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .seating-seat:hover { background: #262c3a; }
+[data-theme="dark"] .student-card { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .student-notes { background: #262c3a; }
+[data-theme="dark"] .tool-card { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .timer-display, [data-theme="dark"] .stopwatch-display,
+[data-theme="dark"] .dice-display, [data-theme="dark"] .rps-display {
+  background: #262c3a; color: var(--ink);
+}
+[data-theme="dark"] .vote-option { background: #262c3a; border-color: #2a2e38; }
+[data-theme="dark"] .settings-section { border-color: #2a2e38; }
+[data-theme="dark"] .settings-section input { background: #262c3a; color: var(--ink); border-color: #2a2e38; }
+
+/* 모바일 확장 탭 */
+@media (max-width: 640px) {
+  .tabbar { padding: 5px 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .navbtn { padding: 7px 12px; font-size: 0.8rem; }
+  .navicon { display: none; }
+  .tools-grid { grid-template-columns: 1fr; }
+  .timetable-grid th, .timetable-grid td { padding: 8px 4px; font-size: 0.75rem; }
+  .seating-grid { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .seating-seat { padding: 4px; font-size: 0.7rem; }
+}
 [data-theme="dark"] .btn-icon { color: var(--ink); }
