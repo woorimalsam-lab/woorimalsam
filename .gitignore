@@ -1,3 +1,9 @@
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# 학생 개인정보 파일 (절대 커밋 금지)
+*.xlsx
+*.xls
+*명렬표*
+*.pdf
