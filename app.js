@@ -811,14 +811,60 @@ async function login() {
     const cred = GoogleAuthProvider.credentialFromResult(result);
     state.calToken = cred?.accessToken || null;
     state.synced = true;
+    state.user = result.user;
     toast(`${result.user.displayName || "사용자"}님 로그인 완료`);
     updateAccountUI();
+    await maybeMigrateLocal(result.user);
     subscribeMemos();
     await refreshEvents();
   } catch (e) {
     console.error(e);
     toast("로그인에 실패했습니다.");
   }
+}
+
+// 로그인 시, 이 기기에만 있던 로컬 메모·일정을 클라우드로 올림
+async function maybeMigrateLocal(user) {
+  const localMemos = loadLocal(LOCAL_MEMOS_KEY);
+  const localEvents = loadLocal(LOCAL_EVENTS_KEY);
+  if (!localMemos.length && !localEvents.length) return;
+
+  const ok = confirm(
+    `이 기기에만 저장된 메모 ${localMemos.length}개, 일정 ${localEvents.length}개가 있습니다.\n` +
+    `내 계정(클라우드)으로 올려서 다른 기기에서도 보이게 할까요?`
+  );
+  if (!ok) return;
+
+  const { addDoc, collection, Timestamp } = fb.fs;
+  let memoOk = 0, evOk = 0;
+
+  // 메모 → Firestore (작성 시각 유지)
+  for (const m of localMemos) {
+    try {
+      await addDoc(collection(fb.db, "users", user.uid, "memos"), {
+        text: m.text,
+        category: m.category || "",
+        color: m.color || "default",
+        pinned: !!m.pinned,
+        createdAt: Timestamp.fromMillis(m.createdAt || Date.now()),
+      });
+      memoOk++;
+    } catch (e) { console.error("메모 업로드 실패", e); }
+  }
+
+  // 일정 → 구글 캘린더 (로그인 직후라 토큰 있음)
+  if (state.calToken) {
+    for (const ev of localEvents) {
+      try { await saveGoogleEvent({ ...ev, id: null }); evOk++; }
+      catch (e) { console.error("일정 업로드 실패", e); }
+    }
+  }
+
+  // 성공적으로 올라간 만큼 로컬에서 정리(중복 방지)
+  if (memoOk === localMemos.length) saveLocal(LOCAL_MEMOS_KEY, []);
+  if (state.calToken && evOk === localEvents.length) saveLocal(LOCAL_EVENTS_KEY, []);
+
+  toast(`클라우드로 올렸습니다 (메모 ${memoOk}개, 일정 ${evOk}개)`);
 }
 
 async function logout() {
