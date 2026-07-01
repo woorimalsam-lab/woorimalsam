@@ -30,7 +30,13 @@ const state = {
   synced: false,           // 클라우드 동기화 활성 여부
   editingEventId: null,    // 모달에서 수정 중인 일정 id
   filters: { work: true, subject: true, academic: true }, // 레이어 표시 여부
+  memoCats: [],            // 메모 항목(카테고리) 목록
 };
+
+// 메모 항목 관련
+const DEFAULT_MEMO_CATS = ["수업", "업무", "개인"];
+const UNCAT = "미분류";
+const LOCAL_MEMOCATS_KEY = "myplanner.memocats";
 
 // Firebase 핸들 (설정된 경우에만 채워짐)
 let fb = null;
@@ -445,17 +451,63 @@ async function onDeleteEvent() {
 // ============================================================
 let memoUnsub = null;
 
+// ---------- 메모 항목(카테고리) 관리 ----------
+function loadSavedMemoCats() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_MEMOCATS_KEY)) || []; }
+  catch { return []; }
+}
+function persistMemoCats() {
+  // 기본 항목을 제외한 사용자 추가 항목만 저장
+  const extra = state.memoCats.filter((c) => !DEFAULT_MEMO_CATS.includes(c));
+  localStorage.setItem(LOCAL_MEMOCATS_KEY, JSON.stringify(extra));
+}
+function rebuildMemoCats() {
+  const fromMemos = state.memos.map((m) => m.category).filter((c) => c && c !== UNCAT);
+  state.memoCats = [...new Set([...DEFAULT_MEMO_CATS, ...loadSavedMemoCats(), ...fromMemos])];
+}
+function currentMemoCat() {
+  return $("memo-category").value || state.memoCats[0] || DEFAULT_MEMO_CATS[0];
+}
+function renderMemoCatSelect() {
+  const sel = $("memo-category");
+  const prev = sel.value;
+  sel.innerHTML = "";
+  for (const c of state.memoCats) {
+    const opt = document.createElement("option");
+    opt.value = c;
+    opt.textContent = c;
+    sel.appendChild(opt);
+  }
+  if (prev && state.memoCats.includes(prev)) sel.value = prev;
+}
+function addMemoCategory() {
+  const name = (prompt("새 항목 이름을 입력하세요 (예: 학생상담, 아이디어)") || "").trim();
+  if (!name) return;
+  if (name === UNCAT) return toast(`"${UNCAT}"는 사용할 수 없는 이름입니다.`);
+  if (state.memoCats.includes(name)) {
+    $("memo-category").value = name;
+    return toast("이미 있는 항목입니다.");
+  }
+  state.memoCats.push(name);
+  persistMemoCats();
+  renderMemoCatSelect();
+  $("memo-category").value = name;
+  $("memo-text").focus();
+}
+
+// ---------- 메모 추가/삭제/이동 ----------
 async function addMemo() {
   const text = $("memo-text").value.trim();
   if (!text) return;
+  const category = currentMemoCat();
   if (state.synced && fb) {
     const { addDoc, collection, serverTimestamp } = fb.fs;
     await addDoc(collection(fb.db, "users", state.user.uid, "memos"), {
-      text, createdAt: serverTimestamp(),
+      text, category, createdAt: serverTimestamp(),
     });
   } else {
     const memos = loadLocal(LOCAL_MEMOS_KEY);
-    memos.push({ id: uid(), text, createdAt: Date.now() });
+    memos.push({ id: uid(), text, category, createdAt: Date.now() });
     saveLocal(LOCAL_MEMOS_KEY, memos);
     state.memos = loadLocalMemos();
     renderMemos();
@@ -474,37 +526,116 @@ async function removeMemo(id) {
   }
 }
 
+async function moveMemo(id, category) {
+  if (state.synced && fb) {
+    const { updateDoc, doc } = fb.fs;
+    await updateDoc(doc(fb.db, "users", state.user.uid, "memos", id), { category });
+  } else {
+    const memos = loadLocal(LOCAL_MEMOS_KEY);
+    const m = memos.find((x) => x.id === id);
+    if (m) { m.category = category; saveLocal(LOCAL_MEMOS_KEY, memos); }
+    state.memos = loadLocalMemos();
+    renderMemos();
+  }
+}
+
 function renderMemos() {
+  rebuildMemoCats();
+  renderMemoCatSelect();
+
   const list = $("memo-list");
   list.innerHTML = "";
   $("memo-count").textContent = state.memos.length ? `${state.memos.length}개` : "";
+
   if (!state.memos.length) {
-    const li = document.createElement("li");
-    li.className = "empty-note";
-    li.textContent = "메모가 없습니다.";
-    list.appendChild(li);
+    const p = document.createElement("div");
+    p.className = "empty-note";
+    p.textContent = "메모가 없습니다. 위에서 항목을 고르고 메모를 추가해 보세요.";
+    list.appendChild(p);
     return;
   }
-  for (const m of state.memos) {
-    const li = document.createElement("li");
-    li.className = "memo-item";
-    const body = document.createElement("div");
-    body.className = "memo-body";
-    const content = document.createElement("div");
-    content.className = "memo-content";
-    content.textContent = m.text;
-    const date = document.createElement("div");
-    date.className = "memo-date";
-    date.textContent = m.createdAt ? new Date(m.createdAt).toLocaleString("ko-KR") : "";
-    body.append(content, date);
-    const del = document.createElement("button");
-    del.className = "memo-del";
-    del.textContent = "✕";
-    del.title = "삭제";
-    del.addEventListener("click", () => removeMemo(m.id));
-    li.append(body, del);
-    list.appendChild(li);
+
+  // 표시 순서: 사용자 항목 순서대로, 미분류는 맨 뒤
+  const order = [...state.memoCats];
+  const hasUncat = state.memos.some((m) => !m.category || !state.memoCats.includes(m.category));
+  if (hasUncat) order.push(UNCAT);
+
+  for (const cat of order) {
+    const items = state.memos.filter((m) =>
+      cat === UNCAT
+        ? (!m.category || !state.memoCats.includes(m.category))
+        : m.category === cat
+    );
+    if (items.length) list.appendChild(makeMemoGroup(cat, items));
   }
+}
+
+function makeMemoGroup(cat, items) {
+  const group = document.createElement("div");
+  group.className = "memo-group";
+
+  const head = document.createElement("div");
+  head.className = "memo-group-head";
+  const name = document.createElement("span");
+  name.className = "memo-group-name";
+  name.textContent = cat;
+  const count = document.createElement("span");
+  count.className = "memo-group-count";
+  count.textContent = items.length;
+  head.append(name, count);
+
+  const ul = document.createElement("ul");
+  ul.className = "memo-group-items";
+  for (const m of items) ul.appendChild(makeMemoItem(m, cat));
+
+  group.append(head, ul);
+  return group;
+}
+
+function makeMemoItem(m, cat) {
+  const li = document.createElement("li");
+  li.className = "memo-item";
+
+  const body = document.createElement("div");
+  body.className = "memo-body";
+  const content = document.createElement("div");
+  content.className = "memo-content";
+  content.textContent = m.text;
+
+  const meta = document.createElement("div");
+  meta.className = "memo-meta";
+
+  // 다른 항목으로 이동하는 드롭다운
+  const move = document.createElement("select");
+  move.className = "memo-move";
+  move.title = "다른 항목으로 이동";
+  const opts = cat === UNCAT ? [UNCAT, ...state.memoCats] : [...state.memoCats];
+  for (const c of opts) {
+    const o = document.createElement("option");
+    o.value = c;
+    o.textContent = c;
+    move.appendChild(o);
+  }
+  move.value = cat;
+  move.addEventListener("change", () => {
+    if (move.value !== cat && move.value !== UNCAT) moveMemo(m.id, move.value);
+  });
+
+  const date = document.createElement("span");
+  date.className = "memo-date";
+  date.textContent = m.createdAt ? new Date(m.createdAt).toLocaleString("ko-KR") : "";
+
+  meta.append(move, date);
+  body.append(content, meta);
+
+  const del = document.createElement("button");
+  del.className = "memo-del";
+  del.textContent = "✕";
+  del.title = "삭제";
+  del.addEventListener("click", () => removeMemo(m.id));
+
+  li.append(body, del);
+  return li;
 }
 
 function subscribeMemos() {
@@ -525,6 +656,7 @@ function subscribeMemos() {
       return {
         id: d.id,
         text: data.text,
+        category: data.category || "",
         createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
       };
     });
@@ -647,6 +779,7 @@ function bindEvents() {
   $("logout-btn").addEventListener("click", logout);
 
   $("add-memo-btn").addEventListener("click", addMemo);
+  $("add-memo-cat").addEventListener("click", addMemoCategory);
   $("memo-text").addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") addMemo();
   });

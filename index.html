@@ -56,10 +56,14 @@
         <span id="memo-count" class="muted"></span>
       </div>
       <div class="memo-input">
+        <div class="memo-cat-row">
+          <select id="memo-category" class="memo-cat-select" title="메모를 넣을 항목"></select>
+          <button id="add-memo-cat" class="btn btn-ghost btn-sm" title="새 항목 만들기">＋ 항목</button>
+        </div>
         <textarea id="memo-text" rows="3" placeholder="메모를 입력하고 Ctrl+Enter 또는 '추가'를 누르세요"></textarea>
         <button id="add-memo-btn" class="btn btn-primary">추가</button>
       </div>
-      <ul id="memo-list" class="memo-list"></ul>
+      <div id="memo-list" class="memo-list"></div>
     </section>
   </main>
 

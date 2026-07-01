@@ -215,6 +215,40 @@ body {
 
 /* ---------- Memo ---------- */
 .memo-input { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.memo-cat-row { display: flex; gap: 8px; }
+.memo-cat-select {
+  flex: 1;
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 10px; font-family: inherit; font-size: 0.9rem;
+  background: #fff; color: var(--ink);
+}
+.memo-cat-select:focus { outline: none; border-color: var(--primary); }
+.btn-sm { padding: 6px 10px; font-size: 0.82rem; }
+
+/* 항목별 그룹 */
+.memo-group { margin-bottom: 14px; }
+.memo-group-head {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 2px 8px;
+  font-size: 0.9rem; font-weight: 700; color: var(--ink);
+}
+.memo-group-head::before {
+  content: ""; width: 4px; height: 14px; border-radius: 2px;
+  background: var(--primary);
+}
+.memo-group-count {
+  font-size: 0.72rem; font-weight: 600; color: var(--muted);
+  background: #eef1f6; border-radius: 999px; padding: 1px 8px;
+}
+.memo-group-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.memo-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.memo-move {
+  font-size: 0.72rem; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 7px;
+  padding: 2px 6px; background: #fafbfe; font-family: inherit;
+  cursor: pointer; max-width: 120px;
+}
+.memo-move:focus { outline: none; border-color: var(--primary); }
 .memo-input textarea, .modal textarea, .modal input, .modal select {
   width: 100%;
   border: 1px solid var(--line);
