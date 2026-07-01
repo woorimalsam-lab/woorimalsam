@@ -36,6 +36,7 @@ const state = {
   timetable: { mon: [], tue: [], wed: [], thu: [], fri: [] },
   seating: { rows: 6, cols: 8, grid: [] },
   students: [],
+  classFilter: "all",      // 학생 목록 반 필터 ("all" 또는 반 이름)
   settings: { school: "", grade: "", teacher: "" },
   timerInterval: null,
   timerTime: 0,
@@ -1521,23 +1522,69 @@ function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (ch) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 }
+// 등록된 반 목록 (숫자 오름차순, 반 미지정은 뒤로)
+function studentClasses() {
+  const set = new Set(state.students.map((s) => s.class || ""));
+  return [...set].sort((a, b) => {
+    if (a === "") return 1;
+    if (b === "") return -1;
+    return (Number(a) || 0) - (Number(b) || 0) || a.localeCompare(b, "ko");
+  });
+}
+
+// 반 필터 칩 (전체 · 7반 · 8반 · …) — 반이 2개 이상일 때만 표시
+function renderClassFilter() {
+  const bar = $("student-class-filter");
+  if (!bar) return;
+  const classes = studentClasses();
+  if (classes.length < 2) {
+    bar.innerHTML = "";
+    state.classFilter = "all";
+    return;
+  }
+  // 현재 필터가 사라진 반이면 전체로 복귀
+  if (state.classFilter !== "all" && !classes.includes(state.classFilter)) state.classFilter = "all";
+
+  const countOf = (c) => state.students.filter((s) => (s.class || "") === c).length;
+  let html = `<button class="class-chip${state.classFilter === "all" ? " active" : ""}" data-class="all">전체 ${state.students.length}</button>`;
+  for (const c of classes) {
+    const label = c === "" ? "반 미지정" : `${escapeHtml(c)}반`;
+    html += `<button class="class-chip${state.classFilter === c ? " active" : ""}" data-class="${escapeHtml(c)}">${label} ${countOf(c)}</button>`;
+  }
+  bar.innerHTML = html;
+}
+
 function renderStudents() {
   const list = $("students-list");
   if (!list) return;
+  renderClassFilter();
+
   if (!state.students.length) {
     list.innerHTML = '<p style="text-align:center; color: var(--muted); padding: 20px;">학생을 추가하거나 NEIS 명렬표를 업로드해 주세요.</p>';
     return;
   }
+
+  // 반 필터 적용
+  const filtered = state.classFilter === "all"
+    ? state.students
+    : state.students.filter((s) => (s.class || "") === state.classFilter);
+
+  if (!filtered.length) {
+    list.innerHTML = '<p style="text-align:center; color: var(--muted); padding: 20px;">이 반에는 학생이 없습니다.</p>';
+    return;
+  }
+
   // 반 → 번호 → 이름 순 정렬
-  const sorted = [...state.students].sort((a, b) =>
+  const sorted = [...filtered].sort((a, b) =>
     (Number(a.class) || 0) - (Number(b.class) || 0) ||
     (Number(a.number) || 0) - (Number(b.number) || 0) ||
     a.name.localeCompare(b.name, "ko"));
 
-  let html = `<p class="muted" style="margin: 0 0 10px;">총 ${sorted.length}명</p>`;
+  const label = state.classFilter === "all" ? "총" : `${state.classFilter}반`;
+  let html = `<p class="muted" style="margin: 0 0 10px;">${label} ${sorted.length}명</p>`;
   let lastClass = null;
   for (const s of sorted) {
-    if (s.class && s.class !== lastClass) {
+    if (state.classFilter === "all" && s.class && s.class !== lastClass) {
       html += `<h3 class="student-class-head">${escapeHtml(s.class)}반</h3>`;
       lastClass = s.class;
     }
@@ -1890,6 +1937,14 @@ function bindEventsNew() {
   // 학생 - 수동 추가
   $("add-student-btn")?.addEventListener("click", addStudent);
   $("student-name")?.addEventListener("keydown", (e) => { if (e.key === "Enter") addStudent(); });
+
+  // 학생 - 반 필터 칩
+  $("student-class-filter")?.addEventListener("click", (e) => {
+    const chip = e.target.closest(".class-chip");
+    if (!chip) return;
+    state.classFilter = chip.dataset.class;
+    renderStudents();
+  });
 
   // 학생 - 삭제/메모 (이벤트 위임 — 카드가 동적으로 생성되므로)
   $("students-list")?.addEventListener("click", (e) => {

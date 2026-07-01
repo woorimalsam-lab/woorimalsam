@@ -142,10 +142,9 @@
         <!-- NEIS 가져오기 탭 -->
         <div id="student-tab-import" class="student-tab-content hidden">
           <div class="import-guide">
-            <p>📋 <strong>NEIS 명렬표 CSV 파일</strong>을 업로드하면 자동으로 반, 번호, 이름이 추가됩니다.</p>
+            <p>📋 나이스에서 받은 <strong>명렬표 파일(.xlsx 또는 .csv)</strong>을 그대로 올리면 반·번호·이름이 자동 추가됩니다.</p>
             <p style="font-size: 0.85rem; color: var(--muted);">
-              파일 형식: 반, 번호, 이름 컬럼을 포함한 CSV 파일<br/>
-              예: 1반 1번 홍길동
+              여러 반 명렬표를 차례로 올리면 아래에서 <strong>반별로 골라 볼 수 있습니다.</strong> 같은 학생은 중복 추가되지 않아요.
             </p>
           </div>
           <div class="student-import-controls">
@@ -155,6 +154,7 @@
           <div id="import-result" class="import-result hidden"></div>
         </div>
 
+        <div id="student-class-filter" class="student-class-filter"></div>
         <div class="students-list" id="students-list"></div>
       </div>
     </section>

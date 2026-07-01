@@ -815,6 +815,20 @@ body {
 .seating-seat.empty { color: var(--muted); border-style: dashed; }
 .seating-hint { margin: 10px 0 0; }
 
+/* ---------- 학생: 반 필터 칩 ---------- */
+.student-class-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.student-class-filter:empty { margin-bottom: 0; }
+.class-chip {
+  border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+  border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  font-family: inherit; font-size: 0.84rem; font-weight: 600;
+  transition: all 0.12s ease;
+}
+.class-chip:hover { border-color: var(--primary); color: var(--ink); }
+.class-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+[data-theme="dark"] .class-chip { background: #1f2430; border-color: #2a2e38; color: #b3b9c6; }
+[data-theme="dark"] .class-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
 /* ---------- 학생: 반 그룹 헤더 ---------- */
 .student-class-head {
   margin: 14px 0 4px; font-size: 0.92rem; color: var(--primary);
