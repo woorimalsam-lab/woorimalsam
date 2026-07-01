@@ -55,12 +55,12 @@ const pad = (n) => String(n).padStart(2, "0");
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const todayStr = () => ymd(new Date());
 
-function toast(msg) {
+function toast(msg, ms = 2600) {
   const t = $("toast");
   t.textContent = msg;
   t.classList.remove("hidden");
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.add("hidden"), 2600);
+  toast._t = setTimeout(() => t.classList.add("hidden"), ms);
 }
 
 function fmtMonthTitle(d) {
@@ -798,28 +798,74 @@ async function initFirebase() {
       refreshEvents();
     }
   });
+
+  // 리디렉션 로그인으로 돌아온 경우 처리
+  try {
+    const redirectResult = await authMod.getRedirectResult(auth);
+    if (redirectResult && redirectResult.user) await afterSignIn(redirectResult);
+  } catch (e) {
+    console.error("리디렉션 결과 오류", e);
+    toast(authErrorMessage(e), 7000);
+  }
+}
+
+// 로그인 오류를 사람이 읽을 수 있게 변환
+function authErrorMessage(e) {
+  const code = e?.code || "";
+  const map = {
+    "auth/unauthorized-domain": "이 주소가 Firebase '승인된 도메인'에 없습니다.",
+    "auth/operation-not-allowed": "구글 로그인이 Firebase에서 사용 설정되지 않았습니다.",
+    "auth/popup-blocked": "브라우저가 로그인 팝업을 차단했습니다.",
+    "auth/popup-closed-by-user": "로그인 창이 닫혔습니다. 다시 시도해 주세요.",
+    "auth/cancelled-popup-request": "로그인 요청이 취소되었습니다.",
+    "auth/network-request-failed": "네트워크 오류입니다. 연결을 확인해 주세요.",
+    "auth/internal-error": "인증 처리 중 오류가 발생했습니다.",
+    "auth/invalid-api-key": "Firebase API 키가 올바르지 않습니다.",
+  };
+  const friendly = map[code] || "로그인에 실패했습니다.";
+  return code ? `${friendly}  [${code}]` : friendly;
+}
+
+// 로그인 성공 후 공통 처리 (팝업/리디렉션 공용)
+async function afterSignIn(result) {
+  const { GoogleAuthProvider } = fb.authMod;
+  const cred = GoogleAuthProvider.credentialFromResult(result);
+  state.calToken = cred?.accessToken || null;
+  state.synced = true;
+  state.user = result.user;
+  toast(`${result.user.displayName || "사용자"}님 로그인 완료`);
+  updateAccountUI();
+  await maybeMigrateLocal(result.user);
+  subscribeMemos();
+  await refreshEvents();
 }
 
 async function login() {
   if (!fb) return;
-  const { GoogleAuthProvider, signInWithPopup } = fb.authMod;
+  const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = fb.authMod;
   const provider = new GoogleAuthProvider();
   provider.addScope(CAL_SCOPE);
-  provider.setCustomParameters({ access_type: "online", prompt: "consent" });
+  provider.setCustomParameters({ prompt: "consent" });
   try {
     const result = await signInWithPopup(fb.auth, provider);
-    const cred = GoogleAuthProvider.credentialFromResult(result);
-    state.calToken = cred?.accessToken || null;
-    state.synced = true;
-    state.user = result.user;
-    toast(`${result.user.displayName || "사용자"}님 로그인 완료`);
-    updateAccountUI();
-    await maybeMigrateLocal(result.user);
-    subscribeMemos();
-    await refreshEvents();
+    await afterSignIn(result);
   } catch (e) {
-    console.error(e);
-    toast("로그인에 실패했습니다.");
+    console.error("로그인 오류", e);
+    const code = e?.code || "";
+    // 팝업이 막히거나 미지원 환경(모바일 등)이면 페이지 이동 방식으로 재시도
+    if (["auth/popup-blocked", "auth/cancelled-popup-request",
+         "auth/popup-closed-by-user", "auth/operation-not-supported-in-this-environment"].includes(code)) {
+      try {
+        toast("팝업이 막혀 페이지 이동 방식으로 로그인합니다…");
+        await signInWithRedirect(fb.auth, provider);
+        return;
+      } catch (e2) {
+        console.error("리디렉션 로그인 오류", e2);
+        toast(authErrorMessage(e2), 7000);
+        return;
+      }
+    }
+    toast(authErrorMessage(e), 7000);
   }
 }
 
