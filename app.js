@@ -7,10 +7,11 @@ import { academicEvents, academicMeta } from "./academic-calendar.js";
 const TZ = "Asia/Seoul";
 const CAL_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
-// 일정 분류 정의
+// 일정 분류 정의 (표시 순서: 개인 → 업무 → 교과)
 const CATEGORIES = {
-  work:    { label: "업무", color: "#3b6ef5", googleColorId: "9" },   // 파랑
-  subject: { label: "교과", color: "#1c9963", googleColorId: "10" },  // 초록
+  personal: { label: "개인", color: "#8b5cf6", googleColorId: "3" },   // 보라
+  work:     { label: "업무", color: "#3b6ef5", googleColorId: "9" },   // 파랑
+  subject:  { label: "교과", color: "#1c9963", googleColorId: "10" },  // 초록
 };
 const ACADEMIC_COLOR = "#e08a1e";  // 학사(주황)
 const HOLIDAY_COLOR = "#e5484d";   // 공휴일(빨강)
@@ -29,7 +30,7 @@ const state = {
   calToken: null,          // 구글 캘린더 접근 토큰
   synced: false,           // 클라우드 동기화 활성 여부
   editingEventId: null,    // 모달에서 수정 중인 일정 id
-  filters: { work: true, subject: true, academic: true }, // 레이어 표시 여부
+  filters: { personal: true, work: true, subject: true, academic: true }, // 레이어 표시 여부
   memoCats: [],            // 메모 항목(카테고리) 목록
   memoSearch: "",          // 메모 검색어
   paletteFor: null,        // 색상 팔레트가 열린 메모 id
@@ -844,9 +845,35 @@ function updateAccountUI() {
 }
 
 // ============================================================
+//  다크 모드
+// ============================================================
+const THEME_KEY = "myplanner.theme";
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  const btn = $("theme-btn");
+  if (btn) {
+    btn.textContent = theme === "dark" ? "☀️" : "🌙";
+    btn.title = theme === "dark" ? "라이트 모드 전환" : "다크 모드 전환";
+  }
+}
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  applyTheme(saved || (prefersDark ? "dark" : "light"));
+}
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const next = cur === "dark" ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+}
+
+// ============================================================
 //  이벤트 바인딩 / 시작
 // ============================================================
 function bindEvents() {
+  $("theme-btn").addEventListener("click", toggleTheme);
   $("prev-month").addEventListener("click", () => {
     state.view = new Date(state.view.getFullYear(), state.view.getMonth() - 1, 1);
     refreshEvents();
@@ -910,6 +937,7 @@ function bindEvents() {
 }
 
 async function start() {
+  initTheme();
   bindEvents();
   state.selected = todayStr();
   updateAccountUI();

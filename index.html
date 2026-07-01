@@ -11,6 +11,7 @@
   <header class="topbar">
     <div class="brand">🗓️ 내 일정 · 메모</div>
     <div class="account">
+      <button id="theme-btn" class="btn btn-ghost btn-icon" title="다크 모드 전환">🌙</button>
       <span id="mode-badge" class="badge">로컬 저장 모드</span>
       <span id="user-name" class="user-name"></span>
       <button id="login-btn" class="btn btn-primary">구글 로그인</button>
@@ -31,6 +32,7 @@
       </div>
 
       <div class="legend" id="legend">
+        <button class="chip chip-personal active" data-cat="personal"><span class="chip-dot"></span>개인</button>
         <button class="chip chip-work active" data-cat="work"><span class="chip-dot"></span>업무</button>
         <button class="chip chip-subject active" data-cat="subject"><span class="chip-dot"></span>교과</button>
         <button class="chip chip-academic active" data-cat="academic"><span class="chip-dot"></span>학사</button>
@@ -83,6 +85,7 @@
       <h3 id="event-modal-title">일정 추가</h3>
       <label>분류
         <select id="ev-category">
+          <option value="personal">개인</option>
           <option value="work">업무</option>
           <option value="subject">교과</option>
         </select>
