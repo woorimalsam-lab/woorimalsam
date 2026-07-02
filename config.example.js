@@ -5,7 +5,7 @@
 // ============================================================
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyDxCefa6kRAGkq5zWFKiX-Ikiy0eXqI-cs",
+  apiKey: "YOUR_API_KEY_HERE",
   authDomain: "woorimalsam-7f454.firebaseapp.com",
   projectId: "woorimalsam-7f454",
   storageBucket: "woorimalsam-7f454.firebasestorage.app",
@@ -16,4 +16,4 @@ export const firebaseConfig = {
 
 // 설정값이 실제로 채워졌는지 검사 (비어 있으면 로컬 모드)
 export const isConfigured =
-  firebaseConfig.apiKey && firebaseConfig.projectId ? true : false;
+  firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.apiKey !== "YOUR_API_KEY_HERE" ? true : false;
