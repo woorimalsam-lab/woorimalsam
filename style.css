@@ -842,6 +842,41 @@ body {
 }
 .student-num { color: var(--primary); font-weight: 700; }
 
+/* ---------- 도구: 발표자 뽑기 / 모둠 편성 / 점수판 ---------- */
+.tool-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.tool-row select { flex: 1; min-width: 90px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); }
+.tool-check { display: inline-flex; align-items: center; gap: 5px; font-size: 0.84rem; color: var(--muted); white-space: nowrap; }
+.tool-check input[type="number"] { width: 52px; padding: 5px; border: 1px solid var(--line); border-radius: 6px; }
+
+.picker-result {
+  min-height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--accent-soft); border-radius: 10px; padding: 14px;
+  font-size: 0.85rem; color: var(--muted); text-align: center; gap: 4px;
+}
+.picker-name { font-size: 1.7rem; font-weight: 800; color: var(--ink); }
+.picker-name b { color: var(--primary); }
+.picker-remain { font-size: 0.78rem; color: var(--muted); }
+
+.group-result { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.group-box { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--panel); }
+.group-box-head { font-weight: 700; font-size: 0.88rem; color: var(--primary); margin-bottom: 6px; }
+.group-member { font-size: 0.85rem; padding: 2px 0; }
+.group-member b { color: var(--primary); font-size: 0.78em; }
+
+.scoreboard { display: flex; gap: 10px; }
+.score-team { flex: 1; text-align: center; border: 1px solid var(--line); border-radius: 12px; padding: 12px 8px; }
+.score-name { width: 90%; text-align: center; border: none; background: transparent; font-family: inherit; font-weight: 700; font-size: 0.9rem; color: var(--ink); }
+.score-name:focus { outline: 1px solid var(--primary); border-radius: 4px; }
+.score-val { font-size: 2.6rem; font-weight: 800; margin: 6px 0; }
+.score-blue { color: var(--cat-work); }
+.score-red { color: var(--cat-holiday); }
+.score-btns { display: flex; gap: 6px; justify-content: center; }
+
+[data-theme="dark"] .picker-result { background: #262c3a; }
+[data-theme="dark"] .picker-name { color: var(--ink); }
+[data-theme="dark"] .tool-row select, [data-theme="dark"] .tool-check input[type="number"] { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .group-box, [data-theme="dark"] .score-team { background: #1f2430; border-color: #2a2e38; }
+
 /* ---------- 투표 (클릭 집계) ---------- */
 .vote-option {
   width: 100%; font-family: inherit; font-size: 0.88rem; color: var(--ink);

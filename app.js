@@ -488,6 +488,66 @@ function addMemoCategory() {
 }
 
 // ---------- 메모 추가/삭제/이동 ----------
+// ---------- 메모 속 날짜 인식 → 달력 자동 반영 ----------
+// 지원: 2026-07-15 · 7월 15일 · 7/15 · 오늘/내일/모레 (+ 14:00 · 오후 2시 · 2시 30분)
+function extractDateFromMemo(text) {
+  const now = new Date();
+  let date = null, matched = "";
+  let m;
+
+  if ((m = /(\d{4})[.\/\-](\d{1,2})[.\/\-](\d{1,2})/.exec(text))) {
+    const [, y, mo, d] = m.map(Number);
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) { date = `${m[1]}-${pad(mo)}-${pad(d)}`; matched = m[0]; }
+  } else if ((m = /(\d{1,2})\s*월\s*(\d{1,2})\s*일/.exec(text))) {
+    const mo = Number(m[1]), d = Number(m[2]);
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+      let y = now.getFullYear();
+      const cand = new Date(y, mo - 1, d);
+      if (cand < now && (now - cand) / 86400000 > 120) y++;   // 4달 넘게 지난 날짜면 내년으로
+      date = `${y}-${pad(mo)}-${pad(d)}`; matched = m[0];
+    }
+  } else if ((m = /(?:^|[^\d.\/])(\d{1,2})\/(\d{1,2})(?![\d\/])/.exec(text))) {
+    const mo = Number(m[1]), d = Number(m[2]);
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+      let y = now.getFullYear();
+      const cand = new Date(y, mo - 1, d);
+      if (cand < now && (now - cand) / 86400000 > 120) y++;
+      date = `${y}-${pad(mo)}-${pad(d)}`; matched = m[1] + "/" + m[2];
+    }
+  } else if ((m = /오늘|내일|모레/.exec(text))) {
+    const offset = { "오늘": 0, "내일": 1, "모레": 2 }[m[0]];
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    date = ymd(d); matched = m[0];
+  }
+  if (!date) return null;
+
+  // 시간 추출 (선택)
+  let time = null, timeMatched = "";
+  let t;
+  if ((t = /(\d{1,2}):(\d{2})/.exec(text))) {
+    const h = Number(t[1]), mi = Number(t[2]);
+    if (h <= 23 && mi <= 59) { time = `${pad(h)}:${pad(mi)}`; timeMatched = t[0]; }
+  } else if ((t = /(오전|오후)?\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분|\s*(반))?/.exec(text))) {
+    let h = Number(t[2]);
+    const mi = t[4] ? 30 : Number(t[3] || 0);
+    if (h >= 1 && h <= 24 && mi <= 59) {
+      if (t[1] === "오후" && h < 12) h += 12;
+      if (!t[1] && h <= 8) h += 12;   // 표기 없는 1~8시는 오후로 간주 (학교 일과 기준)
+      if (h === 24) h = 0;
+      time = `${pad(h)}:${pad(mi)}`; timeMatched = t[0];
+    }
+  }
+
+  // 일정 제목: 날짜·시간 표현을 뺀 첫 줄
+  let title = text.replace(matched, " ");
+  if (timeMatched) title = title.replace(timeMatched, " ");
+  title = title.split("\n")[0].replace(/\s+/g, " ").replace(/^[\s,.\-~에은는]+|[\s,.\-~에은는]+$/g, "").trim();
+  if (title.length > 30) title = title.slice(0, 30) + "…";
+  if (!title) title = "메모 일정";
+
+  return { date, time, title };
+}
+
 async function addMemo() {
   const text = $("memo-text").value.trim();
   if (!text) return;
@@ -506,6 +566,27 @@ async function addMemo() {
   }
   $("memo-text").value = "";
   $("memo-text").style.height = "auto";
+
+  // 날짜가 들어 있으면 달력에도 자동 등록
+  try {
+    const hit = extractDateFromMemo(text);
+    if (hit) {
+      await saveEvent({
+        id: null,
+        title: hit.title,
+        date: hit.date,
+        allDay: !hit.time,
+        start: hit.time || "",
+        end: "",
+        desc: `메모에서 자동 등록:\n${text}`,
+        category: "personal",
+      });
+      await refreshEvents();
+      toast(`📅 달력에도 추가했어요 — ${fmtDdayDate(hit.date)}${hit.time ? " " + hit.time : ""} '${hit.title}'`, 6000);
+    }
+  } catch (e) {
+    console.error("메모→달력 자동 등록 실패", e);
+  }
 }
 
 // 메모 속성 변경(색상/고정) 공통 처리
@@ -1157,6 +1238,7 @@ function setView(name) {
   if (name === "students") renderStudents();
   if (name === "calendar") { renderCalendar(); if (state.selected) renderDayDetail(); }
   if (name === "memo") renderMemos();
+  if (name === "tools") renderToolClassSelects();
 
   window.scrollTo(0, 0);
 }
@@ -1687,15 +1769,47 @@ function parseNEISData(data) {
     }
   }
 
-  // 2) 제목 행에서 "2-8" 같은 반 정보 추출 (반 칸이 없는 파일 대비)
+  // 2) 제목 행에서 "2학년 8반"/"2-8" 같은 반 정보 추출
   let fallbackClass = "";
-  for (let r = 0; r < Math.max(headerRow, 0); r++) {
+  const titleScan = headerRow > 0 ? headerRow : Math.min(data.length, 10);
+  for (let r = 0; r < titleScan; r++) {
     const joined = (data[r] || []).map((v) => String(v ?? "")).join(" ");
     const m = /(\d{1,2})\s*학년\s*(\d{1,2})\s*반/.exec(joined) || /(\d{1,2})\s*-\s*(\d{1,2})/.exec(joined);
     if (m) { fallbackClass = m[2]; break; }
   }
 
   let added = 0, skippedDup = 0;
+  const pushStudent = (name, klass, number) => {
+    name = (name || "").trim();
+    if (!name || /^\d+$/.test(name)) return;
+    klass = (klass || "").replace(/반$/, "");
+    number = (number || "").replace(/번$/, "");
+    if (state.students.find((s) => s.name === name && s.class === klass && s.number === number)) {
+      skippedDup++;
+      return;
+    }
+    state.students.push({ id: uid(), name, class: klass, number, notes: "", date: new Date().toISOString() });
+    added++;
+  };
+
+  // 2.5) 헤더가 없으면 '사진명렬표' 형식 시도: "1번 강건" 같은 셀들이 흩어져 있음
+  if (headerRow === -1) {
+    const found = [];
+    for (const row of data) {
+      for (const cell of row || []) {
+        const m = /^(\d{1,3})\s*번\s*(.+)$/.exec(String(cell ?? "").trim());
+        if (m && m[2].trim() && !/^\d+$/.test(m[2].trim())) found.push({ number: m[1], name: m[2].trim() });
+      }
+    }
+    if (found.length >= 3) {
+      for (const f of found) pushStudent(f.name, fallbackClass, f.number);
+      saveStudents();
+      const dupMsg = skippedDup ? ` (중복 ${skippedDup}명 제외)` : "";
+      return added
+        ? { success: true, added, msg: `${added}명의 학생이 추가되었습니다${dupMsg}` }
+        : { success: true, added, msg: `추가된 학생이 없습니다${dupMsg} — 이미 모두 등록되어 있어요` };
+    }
+  }
 
   for (let i = headerRow + 1; i < data.length; i++) {
     const row = (data[i] || []).map(cellStr);
@@ -1714,19 +1828,7 @@ function parseNEISData(data) {
       else { name = vals[0] || ""; klass = fallbackClass; number = ""; }
     }
 
-    if (!name || /^\d+$/.test(name)) continue;   // 이름이 비었거나 숫자면 데이터 행 아님
-    klass = (klass || "").replace(/반$/, "");
-    number = (number || "").replace(/번$/, "");
-
-    if (state.students.find((s) => s.name === name && s.class === klass && s.number === number)) {
-      skippedDup++;
-      continue;
-    }
-    state.students.push({
-      id: uid(), name, class: klass, number,
-      notes: "", date: new Date().toISOString(),
-    });
-    added++;
+    pushStudent(name, klass, number);
   }
 
   if (!added && !skippedDup) return { success: false, msg: "학생 데이터를 찾지 못했습니다. 파일 형식을 확인해 주세요." };
@@ -1928,6 +2030,94 @@ function playRPS(choice) {
     <div style="font-size: 2rem;">${icons[choice]} vs ${icons[comp]}</div>
     <div style="font-size: 1.5rem; margin-top: 10px; color: var(--primary);">${result}</div>
   `;
+}
+
+// ============================================================
+//  도구 — 발표자 뽑기 · 모둠 편성 · 점수판 (학생 명단 연동)
+// ============================================================
+const pickedByClass = {};   // 발표자 뽑기 '중복 제외'용 (반별, 세션 한정)
+
+// 도구 탭의 반 선택 드롭다운 2개(발표자/모둠)를 학생 명단으로 채움
+function renderToolClassSelects() {
+  const classes = studentClasses().filter((c) => c !== "");
+  const hasUnassigned = state.students.some((s) => !s.class);
+  const opts = classes.map((c) => ({ value: c, label: `${c}반` }));
+  if (hasUnassigned || !classes.length) opts.push({ value: "all", label: classes.length ? "반 미지정" : "전체" });
+
+  for (const id of ["picker-class", "group-class"]) {
+    const sel = $(id);
+    if (!sel) continue;
+    const prev = sel.value;
+    sel.innerHTML = state.students.length
+      ? opts.map((o) => `<option value="${o.value}">${o.label}</option>`).join("")
+      : '<option value="">학생 없음</option>';
+    if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+  }
+}
+function toolClassStudents(selectId) {
+  const cls = $(selectId)?.value;
+  if (!cls) return [];
+  return cls === "all"
+    ? state.students.filter((s) => !s.class)
+    : state.students.filter((s) => s.class === cls);
+}
+
+// 발표자 뽑기
+function pickPresenter() {
+  const cls = $("picker-class")?.value;
+  const pool = toolClassStudents("picker-class");
+  if (!pool.length) { toast("'학생' 메뉴에서 명렬표를 먼저 올려 주세요"); return; }
+
+  let candidates = pool;
+  if ($("picker-norepeat")?.checked) {
+    const picked = (pickedByClass[cls] ||= new Set());
+    candidates = pool.filter((s) => !picked.has(s.id));
+    if (!candidates.length) {
+      picked.clear();
+      candidates = pool;
+      toast("한 바퀴 다 돌았어요! 처음부터 다시 뽑습니다 🔄");
+    }
+  }
+  const s = candidates[Math.floor(Math.random() * candidates.length)];
+  if ($("picker-norepeat")?.checked) pickedByClass[cls].add(s.id);
+
+  const remain = $("picker-norepeat")?.checked ? ` <span class="picker-remain">(남은 인원 ${pool.length - pickedByClass[cls].size}명)</span>` : "";
+  $("picker-result").innerHTML =
+    `<div class="picker-name">${s.number ? `<b>${escapeHtml(s.number)}번</b> ` : ""}${escapeHtml(s.name)}</div>${remain}`;
+}
+
+// 모둠 편성 (라운드로빈으로 인원 균등 배분)
+function makeGroups() {
+  const pool = toolClassStudents("group-class");
+  if (!pool.length) { toast("'학생' 메뉴에서 명렬표를 먼저 올려 주세요"); return; }
+  const n = Math.min(Math.max(parseInt($("group-count").value) || 4, 2), 10);
+  if (n > pool.length) { toast(`학생(${pool.length}명)보다 모둠 수(${n})가 많습니다`); return; }
+
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const groups = Array.from({ length: n }, () => []);
+  shuffled.forEach((s, i) => groups[i % n].push(s));
+
+  $("group-result").innerHTML = groups.map((g, i) => `
+    <div class="group-box">
+      <div class="group-box-head">${i + 1}모둠 <span class="muted">${g.length}명</span></div>
+      ${g.map((s) => `<div class="group-member">${s.number ? `<b>${escapeHtml(s.number)}</b> ` : ""}${escapeHtml(s.name)}</div>`).join("")}
+    </div>`).join("");
+}
+
+// 점수판
+const scoreState = { a: 0, b: 0 };
+function updateScore(team, delta) {
+  scoreState[team] = Math.max(0, scoreState[team] + delta);
+  $("score-" + team).textContent = scoreState[team];
+}
+function resetScores() {
+  scoreState.a = 0; scoreState.b = 0;
+  $("score-a").textContent = "0";
+  $("score-b").textContent = "0";
 }
 
 // 새로운 이벤트 바인딩 추가
@@ -2140,6 +2330,19 @@ function bindEventsNew() {
   document.querySelectorAll("[data-rps]").forEach(btn => {
     btn.addEventListener("click", () => playRPS(btn.dataset.rps));
   });
+
+  // 도구 - 발표자 뽑기 / 모둠 편성
+  $("picker-btn")?.addEventListener("click", pickPresenter);
+  $("group-make-btn")?.addEventListener("click", makeGroups);
+
+  // 도구 - 점수판
+  document.querySelectorAll("[data-score]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const [team, delta] = btn.dataset.score.split(":");
+      updateScore(team, Number(delta));
+    });
+  });
+  $("score-reset")?.addEventListener("click", resetScores);
 }
 
 async function start() {

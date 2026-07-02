@@ -288,6 +288,49 @@
             <button class="btn btn-sm" data-rps="paper">✋ 보</button>
           </div>
         </div>
+
+        <div class="tool-card">
+          <h3>🙋 발표자 뽑기</h3>
+          <div class="tool-row">
+            <select id="picker-class"></select>
+            <label class="tool-check"><input id="picker-norepeat" type="checkbox" checked /> 중복 제외</label>
+            <button id="picker-btn" class="btn btn-primary btn-sm">뽑기</button>
+          </div>
+          <div id="picker-result" class="picker-result">학생 명단에서 무작위로 뽑아요</div>
+        </div>
+
+        <div class="tool-card">
+          <h3>👥 모둠 편성</h3>
+          <div class="tool-row">
+            <select id="group-class"></select>
+            <label class="tool-check">모둠 <input id="group-count" type="number" value="4" min="2" max="10" />개</label>
+            <button id="group-make-btn" class="btn btn-primary btn-sm">편성</button>
+          </div>
+          <div id="group-result" class="group-result"></div>
+        </div>
+
+        <div class="tool-card">
+          <h3>🏆 점수판</h3>
+          <div class="scoreboard">
+            <div class="score-team">
+              <input id="score-name-a" class="score-name" value="청팀" />
+              <div id="score-a" class="score-val score-blue">0</div>
+              <div class="score-btns">
+                <button class="btn btn-sm" data-score="a:1">+1</button>
+                <button class="btn btn-sm btn-ghost" data-score="a:-1">−1</button>
+              </div>
+            </div>
+            <div class="score-team">
+              <input id="score-name-b" class="score-name" value="백팀" />
+              <div id="score-b" class="score-val score-red">0</div>
+              <div class="score-btns">
+                <button class="btn btn-sm" data-score="b:1">+1</button>
+                <button class="btn btn-sm btn-ghost" data-score="b:-1">−1</button>
+              </div>
+            </div>
+          </div>
+          <button id="score-reset" class="btn btn-ghost btn-sm" style="width: 100%; margin-top: 10px;">초기화</button>
+        </div>
       </div>
     </section>
 
