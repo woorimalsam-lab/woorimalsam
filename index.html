@@ -54,6 +54,14 @@
 
         <div class="dash-card">
           <div class="dash-card-head">
+            <span>📝 최근 메모</span>
+            <button class="linkbtn" data-goto="memo">메모 ›</button>
+          </div>
+          <div id="dash-memos" class="dash-memos"></div>
+        </div>
+
+        <div class="dash-card">
+          <div class="dash-card-head">
             <span>🕐 오늘 시간표</span>
             <button class="linkbtn" data-goto="timetable">시간표 ›</button>
           </div>
@@ -70,14 +78,6 @@
             <button id="add-todo-btn" class="btn btn-primary btn-sm">추가</button>
           </div>
           <ul id="todo-list" class="todo-list"></ul>
-        </div>
-
-        <div class="dash-card">
-          <div class="dash-card-head">
-            <span>📝 최근 메모</span>
-            <button class="linkbtn" data-goto="memo">메모 ›</button>
-          </div>
-          <div id="dash-memos" class="dash-memos"></div>
         </div>
       </div>
     </section>
