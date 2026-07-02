@@ -260,6 +260,17 @@
           </div>
         </div>
 
+        <div class="tool-card">
+          <h3>🙋 발표자 뽑기</h3>
+          <div class="tool-row">
+            <select id="picker-grade" title="학년"></select>
+            <select id="picker-class" title="학급"></select>
+            <label class="tool-check"><input id="picker-norepeat" type="checkbox" checked /> 중복 제외</label>
+            <button id="picker-btn" class="btn btn-primary btn-sm">뽑기</button>
+          </div>
+          <div id="picker-result" class="picker-result">학생 명단에서 무작위로 뽑아요</div>
+        </div>
+
         <div class="tool-card tool-card-wide">
           <h3>👥 모둠 편성</h3>
           <div class="tool-row">
@@ -269,15 +280,6 @@
           </div>
           <div id="group-roster" class="group-roster"></div>
           <div id="group-result" class="group-result"></div>
-        </div>
-
-        <div class="tool-card">
-          <h3>🎲 주사위</h3>
-          <div class="dice-display" id="dice-display">🎲</div>
-          <div class="dice-controls">
-            <label>개수: <input id="dice-count" type="number" value="1" min="1" max="10" /></label>
-            <button id="dice-roll-btn" class="btn btn-primary btn-sm">굴리기</button>
-          </div>
         </div>
 
         <div class="tool-card">
@@ -298,26 +300,6 @@
           <div id="numberpick-result" class="numberpick-result"></div>
         </div>
 
-        <div class="tool-card">
-          <h3>🙋 발표자 뽑기</h3>
-          <div class="tool-row">
-            <select id="picker-grade" title="학년"></select>
-            <select id="picker-class" title="학급"></select>
-            <label class="tool-check"><input id="picker-norepeat" type="checkbox" checked /> 중복 제외</label>
-            <button id="picker-btn" class="btn btn-primary btn-sm">뽑기</button>
-          </div>
-          <div id="picker-result" class="picker-result">학생 명단에서 무작위로 뽑아요</div>
-        </div>
-
-        <div class="tool-card">
-          <h3>✂️ 가위바위보</h3>
-          <div class="rps-display" id="rps-display">?</div>
-          <div class="rps-controls">
-            <button class="btn btn-sm" data-rps="scissors">✌️ 가위</button>
-            <button class="btn btn-sm" data-rps="rock">✊ 바위</button>
-            <button class="btn btn-sm" data-rps="paper">✋ 보</button>
-          </div>
-        </div>
       </div>
     </section>
 

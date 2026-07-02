@@ -746,14 +746,14 @@ body {
   box-shadow: var(--shadow);
 }
 .tool-card h3 { margin: 0 0 12px; font-size: 1rem; }
-.timer-display, .stopwatch-display, .dice-display, .numberpick-result, .rps-display {
+.timer-display, .stopwatch-display, .numberpick-result {
   font-size: 2.5rem; text-align: center; font-weight: 700;
   padding: 20px; margin-bottom: 12px; background: var(--accent-soft); border-radius: 10px;
 }
-.timer-controls, .stopwatch-controls, .dice-controls, .rps-controls {
+.timer-controls, .stopwatch-controls {
   display: flex; gap: 8px; flex-wrap: wrap;
 }
-.timer-controls input, .dice-controls input {
+.timer-controls input {
   width: 80px; padding: 6px; border: 1px solid var(--line); border-radius: 6px;
 }
 .vote-input { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -805,7 +805,7 @@ body {
 [data-theme="dark"] .student-import-controls input { background: #1f2430; color: var(--ink); border-color: #2a2e38; }
 [data-theme="dark"] .tool-card { background: #1f2430; border-color: #2a2e38; }
 [data-theme="dark"] .timer-display, [data-theme="dark"] .stopwatch-display,
-[data-theme="dark"] .dice-display, [data-theme="dark"] .rps-display {
+[data-theme="dark"] .numberpick-result {
   background: #262c3a; color: var(--ink);
 }
 [data-theme="dark"] .vote-option { background: #262c3a; border-color: #2a2e38; }

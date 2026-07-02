@@ -1999,13 +1999,6 @@ function resetStopwatch() {
 // ============================================================
 //  도구 — 주사위, 투표, 번호뽑기, 가위바위보
 // ============================================================
-function rollDice() {
-  const count = parseInt($("dice-count").value) || 1;
-  let result = 0;
-  for (let i = 0; i < count; i++) result += Math.floor(Math.random() * 6) + 1;
-  $("dice-display").textContent = result;
-  toast(`🎲 ${count}개 주사위: 합 ${result}`);
-}
 let voteState = null;   // { options: [...], counts: [...] }
 
 function createVote() {
@@ -2044,20 +2037,6 @@ function pickNumber() {
   $("numberpick-result").innerHTML = `<div style="font-size: 3rem; font-weight: 700; color: var(--primary); text-align: center; padding: 30px;">${picked}</div>`;
   toast(`🎯 ${picked}번이 선택되었습니다`);
 }
-function playRPS(choice) {
-  const choices = ["rock", "paper", "scissors"];
-  const comp = choices[Math.floor(Math.random() * 3)];
-  const icons = { rock: "✊", paper: "✋", scissors: "✌️" };
-  const result = (choice === comp) ? "무승부" :
-    (choice === "rock" && comp === "scissors") ||
-    (choice === "paper" && comp === "rock") ||
-    (choice === "scissors" && comp === "paper") ? "승리" : "패배";
-  $("rps-display").innerHTML = `
-    <div style="font-size: 2rem;">${icons[choice]} vs ${icons[comp]}</div>
-    <div style="font-size: 1.5rem; margin-top: 10px; color: var(--primary);">${result}</div>
-  `;
-}
-
 // ============================================================
 //  도구 — 발표자 뽑기 · 모둠 편성 (학년·학급 선택, 학생 명단 연동)
 // ============================================================
@@ -2360,9 +2339,6 @@ function bindEventsNew() {
   $("stopwatch-stop-btn")?.addEventListener("click", stopStopwatch);
   $("stopwatch-reset-btn")?.addEventListener("click", resetStopwatch);
 
-  // 도구 - 주사위
-  $("dice-roll-btn")?.addEventListener("click", rollDice);
-
   // 도구 - 투표 (선택지 클릭 = 1표, 이벤트 위임)
   $("vote-create-btn")?.addEventListener("click", createVote);
   $("vote-option")?.addEventListener("keydown", (e) => { if (e.key === "Enter") createVote(); });
@@ -2377,11 +2353,6 @@ function bindEventsNew() {
 
   // 도구 - 번호뽑기
   $("numberpick-btn")?.addEventListener("click", pickNumber);
-
-  // 도구 - 가위바위보
-  document.querySelectorAll("[data-rps]").forEach(btn => {
-    btn.addEventListener("click", () => playRPS(btn.dataset.rps));
-  });
 
   // 도구 - 발표자 뽑기 (학년 바꾸면 학급 목록도 갱신)
   $("picker-btn")?.addEventListener("click", pickPresenter);
