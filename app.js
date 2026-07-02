@@ -1523,8 +1523,8 @@ function collectTimetableInputs() {
 // ============================================================
 let seatPicked = null;   // 자리 바꾸기용 첫 번째 선택 좌석 {r, c}
 
-// 저장 구조: { rows, cols, currentClass, grids: { "8": [[{num,name}|null,...]], ... } }
-// 반마다 배치를 따로 저장. "all"은 반 정보 없는 학생용.
+// 저장 구조: { rows, cols, currentGrade, currentClass, grids: { "학년|반": [[{num,name}|null,...]], ... } }
+// 학급(학년+반)마다 배치를 따로 저장.
 function emptyGrid(rows, cols) {
   return Array(rows).fill(null).map(() => Array(cols).fill(null));
 }
@@ -1543,46 +1543,44 @@ function loadSeating() {
 function saveSeating() {
   saveLocal(LOCAL_SEATING_KEY, state.seating);
 }
-// 현재 반의 grid (치수가 안 맞거나 없으면 새로 만듦)
+// 현재 학급의 grid 키: "학년|반"
+function seatKey() {
+  return `${state.seating.currentGrade || ""}|${state.seating.currentClass || ""}`;
+}
+// 현재 학급의 grid (치수가 안 맞거나 없으면 새로 만듦)
 function currentGrid() {
-  const { rows, cols, currentClass, grids } = state.seating;
-  let g = grids[currentClass];
+  const { rows, cols, grids } = state.seating;
+  const key = seatKey();
+  // 구버전(반 이름만으로 저장)의 배치를 새 키로 이행
+  const legacy = state.seating.currentClass;
+  if (!grids[key] && legacy && Array.isArray(grids[legacy])) {
+    grids[key] = grids[legacy];
+    delete grids[legacy];
+  }
+  let g = grids[key];
   if (!Array.isArray(g) || g.length !== rows || (g[0] || []).length !== cols) {
     g = emptyGrid(rows, cols);
-    grids[currentClass] = g;
+    grids[key] = g;
   }
   return g;
 }
-// 자리배치용 반 목록: 학생이 있는 반들 (반 미지정 학생이 있으면 "all"도)
-function seatingClassOptions() {
-  const classes = studentClasses().filter((c) => c !== "");
-  const hasUnassigned = state.students.some((s) => !s.class);
-  const opts = classes.map((c) => ({ value: c, label: `${c}반` }));
-  if (hasUnassigned || !classes.length) opts.push({ value: "all", label: classes.length ? "반 미지정" : "전체" });
-  return opts;
-}
-// 선택된 반의 학생들 (번호순)
+// 선택된 학년·반의 학생들 (번호순)
 function seatingStudents() {
-  const cls = state.seating.currentClass;
-  const pool = cls === "all"
-    ? state.students.filter((s) => !s.class)
-    : state.students.filter((s) => s.class === cls);
-  return [...pool].sort((a, b) => (Number(a.number) || 0) - (Number(b.number) || 0));
+  return toolStudents("seating-grade", "seating-class");
 }
 
 function renderSeating() {
   const display = $("seating-display");
   if (!display) return;
 
-  // 반 선택 드롭다운 갱신
-  const select = $("seating-class");
-  if (select) {
-    const opts = seatingClassOptions();
-    if (!opts.some((o) => o.value === state.seating.currentClass)) {
-      state.seating.currentClass = opts[0]?.value || "all";
-    }
-    select.innerHTML = opts.map((o) => `<option value="${o.value}">${o.label}</option>`).join("");
-    select.value = state.seating.currentClass;
+  // 학년·반 드롭다운 갱신 (저장된 선택 우선 반영)
+  const gSel = $("seating-grade"), cSel = $("seating-class");
+  if (gSel && cSel) {
+    gSel.value = state.seating.currentGrade ?? "";
+    cSel.value = state.seating.currentClass ?? "";
+    fillGradeClassSelects("seating-grade", "seating-class");
+    state.seating.currentGrade = gSel.value;
+    state.seating.currentClass = cSel.value;
   }
   const count = $("seating-count");
   if (count) count.textContent = `${seatingStudents().length}명`;
@@ -1640,12 +1638,13 @@ function randomSeating() {
       g[r][c] = { num: s.number || "", name: s.name };
     }
   }
-  state.seating.grids[state.seating.currentClass] = g;
+  state.seating.grids[seatKey()] = g;
   seatPicked = null;
   saveSeating();
   renderSeating();
-  const cls = state.seating.currentClass;
-  toast(`🔀 ${cls === "all" ? "" : cls + "반 "}${shuffled.length}명 자리배치 완료`);
+  const g2 = state.seating.currentGrade, c2 = state.seating.currentClass;
+  const label = (g2 ? g2 + "학년 " : "") + (c2 ? c2 + "반 " : "");
+  toast(`🔀 ${label}${shuffled.length}명 자리배치 완료`);
 }
 
 // ============================================================
@@ -2367,6 +2366,14 @@ function bindEventsNew() {
 
   // 자리배치
   $("random-seating-btn")?.addEventListener("click", randomSeating);
+  $("seating-grade")?.addEventListener("change", (e) => {
+    state.seating.currentGrade = e.target.value;
+    fillGradeClassSelects("seating-grade", "seating-class");   // 학년에 맞는 반 목록 갱신
+    state.seating.currentClass = $("seating-class").value;
+    seatPicked = null;
+    saveSeating();
+    renderSeating();
+  });
   $("seating-class")?.addEventListener("change", (e) => {
     state.seating.currentClass = e.target.value;
     seatPicked = null;
@@ -2381,8 +2388,8 @@ function bindEventsNew() {
   $("create-seating-btn")?.addEventListener("click", () => {
     state.seating.rows = Math.min(Math.max(parseInt($("seating-rows").value) || 5, 1), 10);
     state.seating.cols = Math.min(Math.max(parseInt($("seating-cols").value) || 6, 1), 10);
-    // 치수가 바뀌면 currentGrid()가 반별로 새 격자를 만들므로 현재 반만 비움
-    delete state.seating.grids[state.seating.currentClass];
+    // 치수가 바뀌면 currentGrid()가 학급별로 새 격자를 만들므로 현재 학급만 비움
+    delete state.seating.grids[seatKey()];
     seatPicked = null;
     saveSeating();
     renderSeating();
