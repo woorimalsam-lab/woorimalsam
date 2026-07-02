@@ -2081,13 +2081,28 @@ function renderToolClassSelects() {
   fillGradeClassSelects("picker-grade", "picker-class");
   fillGradeClassSelects("group-grade", "group-class");
   renderGroupRoster();
+  renderPickerHistory();
 }
 
 // 발표자 뽑기
+const LOCAL_PICKLOG_KEY = "myplanner.picklog";
+let pickLog = {};   // { "학년-반": [{grade, class, number, name, at}, ...] }  뽑은 순서 기록
+
+function loadPickLog() {
+  const p = loadLocal(LOCAL_PICKLOG_KEY);
+  pickLog = (p && !Array.isArray(p)) ? p : {};
+}
+function savePickLog() {
+  saveLocal(LOCAL_PICKLOG_KEY, pickLog);
+}
+function pickerKey() {
+  return `${$("picker-grade")?.value ?? ""}-${$("picker-class")?.value ?? ""}`;
+}
+
 function pickPresenter() {
   const pool = toolStudents("picker-grade", "picker-class");
   if (!pool.length) { toast("'학생' 메뉴에서 명렬표를 먼저 올려 주세요"); return; }
-  const key = `${$("picker-grade")?.value}-${$("picker-class")?.value}`;
+  const key = pickerKey();
 
   let candidates = pool;
   if ($("picker-norepeat")?.checked) {
@@ -2102,9 +2117,74 @@ function pickPresenter() {
   const s = candidates[Math.floor(Math.random() * candidates.length)];
   if ($("picker-norepeat")?.checked) pickedByClass[key].add(s.id);
 
+  // 기록 저장 (학급별, 시각 포함)
+  (pickLog[key] ||= []).push({
+    grade: s.grade || "", class: s.class || "", number: s.number || "", name: s.name,
+    at: new Date().toISOString(),
+  });
+  savePickLog();
+
   const remain = $("picker-norepeat")?.checked ? ` <span class="picker-remain">(남은 인원 ${pool.length - pickedByClass[key].size}명)</span>` : "";
   $("picker-result").innerHTML =
     `<div class="picker-name">${s.number ? `<b>${escapeHtml(s.number)}번</b> ` : ""}${escapeHtml(s.name)}</div>${remain}`;
+  renderPickerHistory();
+}
+
+// 뽑기 기록 (현재 학급) — 순서대로 한눈에 + 엑셀 저장/지우기
+function renderPickerHistory() {
+  const box = $("picker-history");
+  if (!box) return;
+  const log = pickLog[pickerKey()] || [];
+  if (!log.length) { box.innerHTML = ""; return; }
+  box.innerHTML =
+    `<div class="picker-history-head">
+       <b>뽑은 순서 (${log.length}회)</b>
+       <span class="spacer"></span>
+       <button id="picklog-export-btn" class="btn btn-ghost btn-sm">📥 엑셀 저장</button>
+       <button id="picklog-clear-btn" class="btn btn-ghost btn-sm">기록 지우기</button>
+     </div>
+     <ol class="picker-history-list">` +
+    log.map((p) => {
+      const t = new Date(p.at);
+      const hm = isNaN(t) ? "" : `${pad(t.getHours())}:${pad(t.getMinutes())}`;
+      return `<li>${p.number ? `<b>${escapeHtml(p.number)}번</b> ` : ""}${escapeHtml(p.name)}<span class="picker-history-time">${hm}</span></li>`;
+    }).join("") +
+    "</ol>";
+}
+
+async function exportPickLog() {
+  const key = pickerKey();
+  const log = pickLog[key] || [];
+  if (!log.length) { toast("내보낼 기록이 없습니다"); return; }
+  try {
+    await ensureXLSX();
+  } catch (e) {
+    toast(e.message);
+    return;
+  }
+  const rows = [["순서", "학년", "반", "번호", "이름", "뽑은 시각"]];
+  log.forEach((p, i) => {
+    const t = new Date(p.at);
+    const at = isNaN(t) ? "" : `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())} ${pad(t.getHours())}:${pad(t.getMinutes())}`;
+    rows.push([i + 1, p.grade, p.class, p.number, p.name, at]);
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 14 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(wb, ws, "발표자 뽑기");
+  const g = $("picker-grade")?.value, c = $("picker-class")?.value;
+  const today = todayStr();
+  XLSX.writeFile(wb, `발표자뽑기_${g ? g + "학년" : ""}${c ? c + "반" : ""}_${today}.xlsx`);
+  toast("📥 엑셀 파일로 저장했습니다");
+}
+function clearPickLog() {
+  const key = pickerKey();
+  if (!(pickLog[key] || []).length) return;
+  if (!confirm("이 학급의 뽑기 기록을 지울까요? ('중복 제외' 순환도 처음부터 다시 시작합니다)")) return;
+  delete pickLog[key];
+  pickedByClass[key]?.clear();
+  savePickLog();
+  renderPickerHistory();
 }
 
 // 모둠 편성: 명렬표에서 모둠장을 클릭해 고르면, 나머지는 랜덤 배분
@@ -2562,9 +2642,17 @@ function bindEventsNew() {
   $("word-pick-btn")?.addEventListener("click", pickWord);
   $("count-text")?.addEventListener("input", renderCharCount);
 
-  // 도구 - 발표자 뽑기 (학년 바꾸면 학급 목록도 갱신)
+  // 도구 - 발표자 뽑기 (학년 바꾸면 학급 목록도 갱신, 학급 바꾸면 기록 갱신)
   $("picker-btn")?.addEventListener("click", pickPresenter);
-  $("picker-grade")?.addEventListener("change", () => fillGradeClassSelects("picker-grade", "picker-class"));
+  $("picker-grade")?.addEventListener("change", () => {
+    fillGradeClassSelects("picker-grade", "picker-class");
+    renderPickerHistory();
+  });
+  $("picker-class")?.addEventListener("change", renderPickerHistory);
+  $("picker-history")?.addEventListener("click", (e) => {
+    if (e.target.closest("#picklog-export-btn")) exportPickLog();
+    if (e.target.closest("#picklog-clear-btn")) clearPickLog();
+  });
 
   // 도구 - 모둠 편성 (학년/학급 변경 시 명렬표 갱신, 모둠장 클릭 선택)
   $("group-grade")?.addEventListener("change", () => {
@@ -2595,6 +2683,7 @@ async function start() {
   loadSeating();
   loadStudents();
   loadSettings();
+  loadPickLog();
 
   // 현재 교시 하이라이트를 1분마다 갱신
   setInterval(() => {

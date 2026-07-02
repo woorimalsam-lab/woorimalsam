@@ -880,6 +880,21 @@ body {
 .picker-name b { color: var(--primary); }
 .picker-remain { font-size: 0.78rem; color: var(--muted); }
 
+/* 발표자 뽑기: 기록 목록 */
+.picker-history { margin-top: 12px; }
+.picker-history-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.85rem; margin-bottom: 8px;
+}
+.picker-history-list {
+  margin: 0; padding-left: 22px;
+  display: flex; flex-direction: column; gap: 3px;
+  max-height: 220px; overflow-y: auto;
+  font-size: 0.86rem;
+}
+.picker-history-list li b { color: var(--primary); }
+.picker-history-time { margin-left: 6px; font-size: 0.72rem; color: var(--muted); }
+
 /* ---------- 국어과 도구: 토론 타이머 / 초성 퀴즈 / 낱말 뽑기 / 글자 수 ---------- */
 .tool-textarea {
   width: 100%; border: 1px solid var(--line); border-radius: 8px;
