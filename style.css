@@ -915,8 +915,9 @@ body {
 .debate-next { text-align: center; margin-top: 6px; font-size: 0.85rem; }
 
 .quiz-word { font-size: 2rem; font-weight: 800; letter-spacing: 4px; color: var(--ink); word-break: break-all; }
-.quiz-word.chosung-dim { font-size: 1rem; color: var(--muted); letter-spacing: 2px; }
-.quiz-answer { font-size: 1.7rem; font-weight: 800; color: var(--primary); margin-top: 4px; }
+.quiz-question { font-size: 1.05rem; font-weight: 700; color: var(--ink); line-height: 1.5; word-break: keep-all; }
+.quiz-word.chosung-dim, .quiz-question.chosung-dim { font-size: 0.85rem; font-weight: 500; color: var(--muted); letter-spacing: normal; }
+.quiz-answer { font-size: 1.7rem; font-weight: 800; color: var(--primary); margin-top: 6px; }
 
 .count-result { display: flex; flex-direction: column; gap: 6px; }
 .count-row {

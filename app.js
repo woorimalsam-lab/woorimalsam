@@ -2359,28 +2359,52 @@ function parseWordList(id) {
 }
 let chosungPool = [], chosungSource = "", chosungCurrent = null;
 
+// 퀴즈 목록 파싱: "문제 = 정답" 한 쌍 또는 단어만(→ 초성 문제로 자동 변환)
+function parseQuizList() {
+  const items = [];
+  for (const line of $("chosung-words").value.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    const sep = t.indexOf("=") !== -1 ? "=" : (t.indexOf("＝") !== -1 ? "＝" : null);
+    if (sep) {
+      const i = t.indexOf(sep);
+      const q = t.slice(0, i).trim();
+      const a = t.slice(i + 1).trim();
+      if (q && a) items.push({ q, a, chosung: false });
+    } else {
+      // 쉼표로 여러 단어를 한 줄에 쓴 경우도 허용
+      for (const w of t.split(",").map((x) => x.trim()).filter(Boolean)) {
+        items.push({ q: toChosung(w), a: w, chosung: true });
+      }
+    }
+  }
+  return items;
+}
+
 function nextChosung() {
-  const words = parseWordList("chosung-words");
-  if (!words.length) { toast("단어 목록을 먼저 입력해 주세요"); return; }
-  const source = words.join("|");
+  const items = parseQuizList();
+  if (!items.length) { toast("문제 목록을 먼저 입력해 주세요"); return; }
+  const source = items.map((x) => x.q + "=" + x.a).join("|");
   if (source !== chosungSource || !chosungPool.length) {
     if (source === chosungSource) toast("한 바퀴 다 냈어요! 처음부터 다시 섞습니다 🔄");
     chosungSource = source;
-    chosungPool = [...words];
+    chosungPool = [...items];
     for (let i = chosungPool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [chosungPool[i], chosungPool[j]] = [chosungPool[j], chosungPool[i]];
     }
   }
   chosungCurrent = chosungPool.pop();
-  $("chosung-display").innerHTML = `<div class="quiz-word">${escapeHtml(toChosung(chosungCurrent))}</div>`;
+  const qClass = chosungCurrent.chosung ? "quiz-word" : "quiz-question";
+  $("chosung-display").innerHTML = `<div class="${qClass}">${escapeHtml(chosungCurrent.q)}</div>`;
   $("chosung-remain").textContent = `남은 문제 ${chosungPool.length}개`;
 }
 function revealChosung() {
   if (!chosungCurrent) { toast("먼저 '문제 내기'를 눌러 주세요"); return; }
+  const qClass = chosungCurrent.chosung ? "quiz-word chosung-dim" : "quiz-question chosung-dim";
   $("chosung-display").innerHTML =
-    `<div class="quiz-word chosung-dim">${escapeHtml(toChosung(chosungCurrent))}</div>` +
-    `<div class="quiz-answer">${escapeHtml(chosungCurrent)}</div>`;
+    `<div class="${qClass}">${escapeHtml(chosungCurrent.q)}</div>` +
+    `<div class="quiz-answer">${escapeHtml(chosungCurrent.a)}</div>`;
 }
 
 // ---------- 낱말 뽑기 ----------

@@ -309,14 +309,18 @@
         </div>
 
         <div class="tool-card">
-          <h3>🔤 초성 퀴즈</h3>
-          <textarea id="chosung-words" rows="3" class="tool-textarea" placeholder="단어를 쉼표나 줄바꿈으로 구분해 입력&#10;예: 은유법, 직유법, 반어, 역설"></textarea>
+          <h3>❓ 퀴즈 (초성·문답)</h3>
+          <p class="muted" style="margin: 0 0 6px; font-size: 0.78rem;">
+            한 줄에 하나씩 · <b>문제 = 정답</b> 형식이면 문제가 먼저 나오고,<br/>
+            <b>단어만</b> 쓰면 초성 퀴즈로 자동 출제됩니다
+          </p>
+          <textarea id="chosung-words" rows="4" class="tool-textarea" placeholder="말하고자 하는 바와 반대로 말하는 표현법은? = 반어법&#10;은유법&#10;직유법"></textarea>
           <div class="tool-row">
             <button id="chosung-next-btn" class="btn btn-primary btn-sm">문제 내기</button>
             <button id="chosung-reveal-btn" class="btn btn-ghost btn-sm">정답 보기</button>
             <span id="chosung-remain" class="muted"></span>
           </div>
-          <div id="chosung-display" class="picker-result">단어 목록을 넣고 '문제 내기'를 누르세요</div>
+          <div id="chosung-display" class="picker-result">문제 목록을 넣고 '문제 내기'를 누르세요</div>
         </div>
 
         <div class="tool-card">
