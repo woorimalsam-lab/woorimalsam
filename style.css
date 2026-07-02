@@ -857,25 +857,36 @@ body {
 .picker-name b { color: var(--primary); }
 .picker-remain { font-size: 0.78rem; color: var(--muted); }
 
+/* 모둠 편성: 넓은 카드 + 명렬표 칩(모둠장 선택) */
+.tool-card-wide { grid-column: 1 / -1; }
+.group-roster { margin-bottom: 12px; }
+.group-roster-hint { margin: 0 0 8px; font-size: 0.8rem; }
+.roster-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.roster-chip {
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  border-radius: 999px; padding: 6px 12px; cursor: pointer;
+  font-family: inherit; font-size: 0.83rem; transition: all 0.12s ease;
+}
+.roster-chip b { color: var(--primary); font-size: 0.82em; margin-right: 1px; }
+.roster-chip:hover { border-color: var(--primary); background: var(--accent-soft); }
+.roster-chip.leader { background: #f5a623; border-color: #f5a623; color: #fff; font-weight: 700; }
+.roster-chip.leader b { color: #fff; }
+.roster-chip.leader::before { content: "👑 "; }
+
 .group-result { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
 .group-box { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--panel); }
 .group-box-head { font-weight: 700; font-size: 0.88rem; color: var(--primary); margin-bottom: 6px; }
 .group-member { font-size: 0.85rem; padding: 2px 0; }
 .group-member b { color: var(--primary); font-size: 0.78em; }
-
-.scoreboard { display: flex; gap: 10px; }
-.score-team { flex: 1; text-align: center; border: 1px solid var(--line); border-radius: 12px; padding: 12px 8px; }
-.score-name { width: 90%; text-align: center; border: none; background: transparent; font-family: inherit; font-weight: 700; font-size: 0.9rem; color: var(--ink); }
-.score-name:focus { outline: 1px solid var(--primary); border-radius: 4px; }
-.score-val { font-size: 2.6rem; font-weight: 800; margin: 6px 0; }
-.score-blue { color: var(--cat-work); }
-.score-red { color: var(--cat-holiday); }
-.score-btns { display: flex; gap: 6px; justify-content: center; }
+.group-member.is-leader { font-weight: 700; }
 
 [data-theme="dark"] .picker-result { background: #262c3a; }
 [data-theme="dark"] .picker-name { color: var(--ink); }
 [data-theme="dark"] .tool-row select, [data-theme="dark"] .tool-check input[type="number"] { background: #1f2430; border-color: #2a2e38; }
-[data-theme="dark"] .group-box, [data-theme="dark"] .score-team { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .group-box { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .roster-chip { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .roster-chip:hover { background: #262c3a; }
+[data-theme="dark"] .roster-chip.leader { background: #b8860b; border-color: #b8860b; }
 
 /* ---------- 투표 (클릭 집계) ---------- */
 .vote-option {

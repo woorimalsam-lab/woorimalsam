@@ -1751,44 +1751,46 @@ function parseNEISData(data) {
 
   // 1) 헤더 행 탐색: 위에서 30행 안에서 '성명'/'이름' 칸이 있는 행 ("성 명"처럼 띄어쓰기 허용)
   let headerRow = -1;
-  let classIdx = -1, numberIdx = -1, nameIdx = -1;
+  let classIdx = -1, numberIdx = -1, nameIdx = -1, gradeIdx = -1;
   const scanMax = Math.min(data.length, 30);
   for (let r = 0; r < scanMax; r++) {
     const row = data[r] || [];
-    let cI = -1, nI = -1, nmI = -1;
+    let cI = -1, nI = -1, nmI = -1, gI = -1;
     for (let i = 0; i < row.length; i++) {
       const h = cellStr(row[i]).replace(/\s+/g, "").toLowerCase();
       if (!h) continue;
       if (h === "반" || h === "class") cI = i;
       if (h === "번호" || h === "번" || h === "no" || h === "number") nI = i;
       if (h === "성명" || h === "이름" || h === "name") nmI = i;
+      if (h === "학년" || h === "grade") gI = i;
     }
     if (nmI !== -1) {
-      headerRow = r; classIdx = cI; numberIdx = nI; nameIdx = nmI;
+      headerRow = r; classIdx = cI; numberIdx = nI; nameIdx = nmI; gradeIdx = gI;
       break;
     }
   }
 
-  // 2) 제목 행에서 "2학년 8반"/"2-8" 같은 반 정보 추출
-  let fallbackClass = "";
+  // 2) 제목 행에서 "2학년 8반"/"2-8" 같은 학년·반 정보 추출
+  let fallbackClass = "", fallbackGrade = "";
   const titleScan = headerRow > 0 ? headerRow : Math.min(data.length, 10);
   for (let r = 0; r < titleScan; r++) {
     const joined = (data[r] || []).map((v) => String(v ?? "")).join(" ");
     const m = /(\d{1,2})\s*학년\s*(\d{1,2})\s*반/.exec(joined) || /(\d{1,2})\s*-\s*(\d{1,2})/.exec(joined);
-    if (m) { fallbackClass = m[2]; break; }
+    if (m) { fallbackGrade = m[1]; fallbackClass = m[2]; break; }
   }
 
   let added = 0, skippedDup = 0;
-  const pushStudent = (name, klass, number) => {
+  const pushStudent = (name, klass, number, grade) => {
     name = (name || "").trim();
     if (!name || /^\d+$/.test(name)) return;
     klass = (klass || "").replace(/반$/, "");
     number = (number || "").replace(/번$/, "");
+    grade = (grade || "").replace(/학년$/, "");
     if (state.students.find((s) => s.name === name && s.class === klass && s.number === number)) {
       skippedDup++;
       return;
     }
-    state.students.push({ id: uid(), name, class: klass, number, notes: "", date: new Date().toISOString() });
+    state.students.push({ id: uid(), name, grade, class: klass, number, notes: "", date: new Date().toISOString() });
     added++;
   };
 
@@ -1802,7 +1804,7 @@ function parseNEISData(data) {
       }
     }
     if (found.length >= 3) {
-      for (const f of found) pushStudent(f.name, fallbackClass, f.number);
+      for (const f of found) pushStudent(f.name, fallbackClass, f.number, fallbackGrade);
       saveStudents();
       const dupMsg = skippedDup ? ` (중복 ${skippedDup}명 제외)` : "";
       return added
@@ -1815,20 +1817,22 @@ function parseNEISData(data) {
     const row = (data[i] || []).map(cellStr);
     if (!row.some(Boolean)) continue;   // 빈 행
 
-    let name, klass, number;
+    let name, klass, number, grade;
     if (nameIdx !== -1) {
       name = row[nameIdx] || "";
       klass = (classIdx !== -1 ? row[classIdx] : "") || fallbackClass;
       number = numberIdx !== -1 ? row[numberIdx] : "";
+      grade = (gradeIdx !== -1 ? row[gradeIdx] : "") || fallbackGrade;
     } else {
       // 헤더 없는 단순 형식: 반, 번호, 이름 순 (2칸이면 번호, 이름)
       const vals = row.filter(Boolean);
       if (vals.length >= 3) [klass, number, name] = vals;
       else if (vals.length === 2) { [number, name] = vals; klass = fallbackClass; }
       else { name = vals[0] || ""; klass = fallbackClass; number = ""; }
+      grade = fallbackGrade;
     }
 
-    pushStudent(name, klass, number);
+    pushStudent(name, klass, number, grade);
   }
 
   if (!added && !skippedDup) return { success: false, msg: "학생 데이터를 찾지 못했습니다. 파일 형식을 확인해 주세요." };
@@ -2033,44 +2037,61 @@ function playRPS(choice) {
 }
 
 // ============================================================
-//  도구 — 발표자 뽑기 · 모둠 편성 · 점수판 (학생 명단 연동)
+//  도구 — 발표자 뽑기 · 모둠 편성 (학년·학급 선택, 학생 명단 연동)
 // ============================================================
-const pickedByClass = {};   // 발표자 뽑기 '중복 제외'용 (반별, 세션 한정)
+const pickedByClass = {};        // 발표자 뽑기 '중복 제외'용 (학년-반별, 세션 한정)
+let groupLeaderIds = new Set();  // 모둠 편성에서 선택한 모둠장들
 
-// 도구 탭의 반 선택 드롭다운 2개(발표자/모둠)를 학생 명단으로 채움
-function renderToolClassSelects() {
-  const classes = studentClasses().filter((c) => c !== "");
-  const hasUnassigned = state.students.some((s) => !s.class);
-  const opts = classes.map((c) => ({ value: c, label: `${c}반` }));
-  if (hasUnassigned || !classes.length) opts.push({ value: "all", label: classes.length ? "반 미지정" : "전체" });
-
-  for (const id of ["picker-class", "group-class"]) {
-    const sel = $(id);
-    if (!sel) continue;
-    const prev = sel.value;
-    sel.innerHTML = state.students.length
-      ? opts.map((o) => `<option value="${o.value}">${o.label}</option>`).join("")
-      : '<option value="">학생 없음</option>';
-    if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
-  }
+function distinctGrades() {
+  return [...new Set(state.students.map((s) => s.grade || ""))]
+    .sort((a, b) => (Number(a) || 99) - (Number(b) || 99));
 }
-function toolClassStudents(selectId) {
-  const cls = $(selectId)?.value;
-  if (!cls) return [];
-  return cls === "all"
-    ? state.students.filter((s) => !s.class)
-    : state.students.filter((s) => s.class === cls);
+function classesOfGrade(grade) {
+  return [...new Set(state.students.filter((s) => (s.grade || "") === grade).map((s) => s.class || ""))]
+    .sort((a, b) => (Number(a) || 99) - (Number(b) || 99));
+}
+// 학년 select + 그 학년의 학급 select 채우기 (선택값 유지)
+function fillGradeClassSelects(gradeId, classId) {
+  const gSel = $(gradeId), cSel = $(classId);
+  if (!gSel || !cSel) return;
+  if (!state.students.length) {
+    gSel.innerHTML = '<option value="">-</option>';
+    cSel.innerHTML = '<option value="">학생 없음</option>';
+    return;
+  }
+  const grades = distinctGrades();
+  const prevG = gSel.value;
+  gSel.innerHTML = grades.map((g) => `<option value="${g}">${g ? g + "학년" : "학년 미지정"}</option>`).join("");
+  if (grades.includes(prevG)) gSel.value = prevG;
+
+  const classes = classesOfGrade(gSel.value);
+  const prevC = cSel.value;
+  cSel.innerHTML = classes.map((c) => `<option value="${c}">${c ? c + "반" : "반 미지정"}</option>`).join("");
+  if (classes.includes(prevC)) cSel.value = prevC;
+}
+// 선택된 학년·학급의 학생 (번호순)
+function toolStudents(gradeId, classId) {
+  const g = $(gradeId)?.value ?? "", c = $(classId)?.value ?? "";
+  if (!state.students.length) return [];
+  return state.students
+    .filter((s) => (s.grade || "") === g && (s.class || "") === c)
+    .sort((a, b) => (Number(a.number) || 0) - (Number(b.number) || 0));
+}
+function renderToolClassSelects() {
+  fillGradeClassSelects("picker-grade", "picker-class");
+  fillGradeClassSelects("group-grade", "group-class");
+  renderGroupRoster();
 }
 
 // 발표자 뽑기
 function pickPresenter() {
-  const cls = $("picker-class")?.value;
-  const pool = toolClassStudents("picker-class");
+  const pool = toolStudents("picker-grade", "picker-class");
   if (!pool.length) { toast("'학생' 메뉴에서 명렬표를 먼저 올려 주세요"); return; }
+  const key = `${$("picker-grade")?.value}-${$("picker-class")?.value}`;
 
   let candidates = pool;
   if ($("picker-norepeat")?.checked) {
-    const picked = (pickedByClass[cls] ||= new Set());
+    const picked = (pickedByClass[key] ||= new Set());
     candidates = pool.filter((s) => !picked.has(s.id));
     if (!candidates.length) {
       picked.clear();
@@ -2079,45 +2100,54 @@ function pickPresenter() {
     }
   }
   const s = candidates[Math.floor(Math.random() * candidates.length)];
-  if ($("picker-norepeat")?.checked) pickedByClass[cls].add(s.id);
+  if ($("picker-norepeat")?.checked) pickedByClass[key].add(s.id);
 
-  const remain = $("picker-norepeat")?.checked ? ` <span class="picker-remain">(남은 인원 ${pool.length - pickedByClass[cls].size}명)</span>` : "";
+  const remain = $("picker-norepeat")?.checked ? ` <span class="picker-remain">(남은 인원 ${pool.length - pickedByClass[key].size}명)</span>` : "";
   $("picker-result").innerHTML =
     `<div class="picker-name">${s.number ? `<b>${escapeHtml(s.number)}번</b> ` : ""}${escapeHtml(s.name)}</div>${remain}`;
 }
 
-// 모둠 편성 (라운드로빈으로 인원 균등 배분)
-function makeGroups() {
-  const pool = toolClassStudents("group-class");
-  if (!pool.length) { toast("'학생' 메뉴에서 명렬표를 먼저 올려 주세요"); return; }
-  const n = Math.min(Math.max(parseInt($("group-count").value) || 4, 2), 10);
-  if (n > pool.length) { toast(`학생(${pool.length}명)보다 모둠 수(${n})가 많습니다`); return; }
+// 모둠 편성: 명렬표에서 모둠장을 클릭해 고르면, 나머지는 랜덤 배분
+function renderGroupRoster() {
+  const box = $("group-roster");
+  if (!box) return;
+  const pool = toolStudents("group-grade", "group-class");
+  // 반이 바뀌어 명단에 없는 모둠장은 선택 해제
+  groupLeaderIds = new Set([...groupLeaderIds].filter((id) => pool.some((s) => s.id === id)));
 
-  const shuffled = [...pool];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  if (!pool.length) {
+    box.innerHTML = '<p class="muted" style="margin:6px 0;">학생이 없습니다. \'학생\' 메뉴에서 명렬표를 올려 주세요.</p>';
+    const res = $("group-result"); if (res) res.innerHTML = "";
+    return;
   }
-  const groups = Array.from({ length: n }, () => []);
-  shuffled.forEach((s, i) => groups[i % n].push(s));
+  box.innerHTML =
+    '<p class="group-roster-hint muted">👑 모둠장이 될 학생을 눌러 선택하세요 — 선택한 수만큼 모둠이 만들어집니다</p>' +
+    '<div class="roster-chips">' +
+    pool.map((s) =>
+      `<button class="roster-chip${groupLeaderIds.has(s.id) ? " leader" : ""}" data-sid="${s.id}">` +
+      `${s.number ? `<b>${escapeHtml(s.number)}</b> ` : ""}${escapeHtml(s.name)}</button>`
+    ).join("") +
+    "</div>";
+}
+function makeGroups() {
+  const pool = toolStudents("group-grade", "group-class");
+  if (!pool.length) { toast("'학생' 메뉴에서 명렬표를 먼저 올려 주세요"); return; }
+  const leaders = pool.filter((s) => groupLeaderIds.has(s.id));
+  if (!leaders.length) { toast("👑 모둠장이 될 학생을 먼저 눌러 선택해 주세요"); return; }
+
+  const rest = pool.filter((s) => !groupLeaderIds.has(s.id));
+  for (let i = rest.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  const groups = leaders.map((l) => [l]);
+  rest.forEach((s, i) => groups[i % groups.length].push(s));
 
   $("group-result").innerHTML = groups.map((g, i) => `
     <div class="group-box">
       <div class="group-box-head">${i + 1}모둠 <span class="muted">${g.length}명</span></div>
-      ${g.map((s) => `<div class="group-member">${s.number ? `<b>${escapeHtml(s.number)}</b> ` : ""}${escapeHtml(s.name)}</div>`).join("")}
+      ${g.map((s, idx) => `<div class="group-member${idx === 0 ? " is-leader" : ""}">${idx === 0 ? "👑 " : ""}${s.number ? `<b>${escapeHtml(s.number)}</b> ` : ""}${escapeHtml(s.name)}</div>`).join("")}
     </div>`).join("");
-}
-
-// 점수판
-const scoreState = { a: 0, b: 0 };
-function updateScore(team, delta) {
-  scoreState[team] = Math.max(0, scoreState[team] + delta);
-  $("score-" + team).textContent = scoreState[team];
-}
-function resetScores() {
-  scoreState.a = 0; scoreState.b = 0;
-  $("score-a").textContent = "0";
-  $("score-b").textContent = "0";
 }
 
 // 새로운 이벤트 바인딩 추가
@@ -2331,18 +2361,25 @@ function bindEventsNew() {
     btn.addEventListener("click", () => playRPS(btn.dataset.rps));
   });
 
-  // 도구 - 발표자 뽑기 / 모둠 편성
+  // 도구 - 발표자 뽑기 (학년 바꾸면 학급 목록도 갱신)
   $("picker-btn")?.addEventListener("click", pickPresenter);
-  $("group-make-btn")?.addEventListener("click", makeGroups);
+  $("picker-grade")?.addEventListener("change", () => fillGradeClassSelects("picker-grade", "picker-class"));
 
-  // 도구 - 점수판
-  document.querySelectorAll("[data-score]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const [team, delta] = btn.dataset.score.split(":");
-      updateScore(team, Number(delta));
-    });
+  // 도구 - 모둠 편성 (학년/학급 변경 시 명렬표 갱신, 모둠장 클릭 선택)
+  $("group-grade")?.addEventListener("change", () => {
+    fillGradeClassSelects("group-grade", "group-class");
+    renderGroupRoster();
   });
-  $("score-reset")?.addEventListener("click", resetScores);
+  $("group-class")?.addEventListener("change", renderGroupRoster);
+  $("group-roster")?.addEventListener("click", (e) => {
+    const chip = e.target.closest(".roster-chip");
+    if (!chip) return;
+    const id = chip.dataset.sid;
+    if (groupLeaderIds.has(id)) groupLeaderIds.delete(id);
+    else groupLeaderIds.add(id);
+    renderGroupRoster();
+  });
+  $("group-make-btn")?.addEventListener("click", makeGroups);
 }
 
 async function start() {
