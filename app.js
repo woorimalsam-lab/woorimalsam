@@ -2151,6 +2151,195 @@ function makeGroups() {
     </div>`).join("");
 }
 
+// ============================================================
+//  도구 — 국어과: 토론 타이머 · 초성 퀴즈 · 낱말 뽑기 · 글자 수
+// ============================================================
+
+// ---------- 토론 타이머 ----------
+let debate = null;   // { stages: [{name, sec}], idx, endAt, remain, timer, paused }
+
+function beep(times = 2) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    for (let i = 0; i < times; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.4);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.4 + 0.3);
+      osc.start(ctx.currentTime + i * 0.4);
+      osc.stop(ctx.currentTime + i * 0.4 + 0.32);
+    }
+  } catch { /* 소리 재생 불가 환경은 무시 */ }
+}
+
+function parseDebateStages() {
+  const stages = [];
+  for (const line of $("debate-stages").value.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    let m = /^(.*?)\s+(\d{1,2}):(\d{2})$/.exec(t);
+    if (m) { stages.push({ name: m[1].trim(), sec: Number(m[2]) * 60 + Number(m[3]) }); continue; }
+    m = /^(.*?)\s+(\d+)\s*분$/.exec(t);
+    if (m) stages.push({ name: m[1].trim(), sec: Number(m[2]) * 60 });
+  }
+  return stages.filter((s) => s.name && s.sec > 0);
+}
+function fmtSec(sec) {
+  return `${Math.floor(sec / 60)}:${pad(sec % 60)}`;
+}
+function renderDebate() {
+  if (!debate) return;
+  const cur = debate.stages[debate.idx];
+  $("debate-stage-label").textContent = `${debate.idx + 1}/${debate.stages.length} · ${cur.name}`;
+  const remain = debate.paused ? debate.remain : Math.max(0, Math.round((debate.endAt - Date.now()) / 1000));
+  const timerEl = $("debate-timer");
+  timerEl.textContent = fmtSec(remain);
+  timerEl.classList.toggle("urgent", remain <= 10);
+  const next = debate.stages[debate.idx + 1];
+  $("debate-next").textContent = next ? `다음: ${next.name} (${fmtSec(next.sec)})` : "마지막 단계입니다";
+}
+function debateTick() {
+  if (!debate || debate.paused) return;
+  const remain = Math.round((debate.endAt - Date.now()) / 1000);
+  if (remain <= 0) {
+    beep();
+    if (debate.idx + 1 < debate.stages.length) {
+      debate.idx++;
+      debate.endAt = Date.now() + debate.stages[debate.idx].sec * 1000;
+      toast(`⚖️ ${debate.stages[debate.idx].name} 시작!`);
+    } else {
+      stopDebate();
+      $("debate-stage-label").textContent = "토론 종료 🎉";
+      $("debate-timer").textContent = "0:00";
+      $("debate-next").textContent = "수고하셨습니다";
+      return;
+    }
+  }
+  renderDebate();
+}
+function startDebate() {
+  const stages = parseDebateStages();
+  if (!stages.length) { toast("단계를 '이름 분:초' 형식으로 한 줄씩 입력해 주세요"); return; }
+  debate = { stages, idx: 0, endAt: Date.now() + stages[0].sec * 1000, remain: 0, paused: false, timer: setInterval(debateTick, 300) };
+  $("debate-setup").classList.add("hidden");
+  $("debate-run").classList.remove("hidden");
+  $("debate-pause-btn").textContent = "⏸ 일시정지";
+  renderDebate();
+}
+function stopDebate() {
+  if (debate?.timer) clearInterval(debate.timer);
+  if (debate) debate.timer = null;
+}
+function pauseDebate() {
+  if (!debate) return;
+  if (debate.paused) {
+    debate.endAt = Date.now() + debate.remain * 1000;
+    debate.paused = false;
+    $("debate-pause-btn").textContent = "⏸ 일시정지";
+  } else {
+    debate.remain = Math.max(0, Math.round((debate.endAt - Date.now()) / 1000));
+    debate.paused = true;
+    $("debate-pause-btn").textContent = "▶ 계속";
+  }
+  renderDebate();
+}
+function skipDebateStage() {
+  if (!debate) return;
+  if (debate.idx + 1 >= debate.stages.length) {
+    stopDebate();
+    $("debate-stage-label").textContent = "토론 종료 🎉";
+    $("debate-timer").textContent = "0:00";
+    $("debate-next").textContent = "수고하셨습니다";
+    return;
+  }
+  debate.idx++;
+  debate.endAt = Date.now() + debate.stages[debate.idx].sec * 1000;
+  debate.paused = false;
+  $("debate-pause-btn").textContent = "⏸ 일시정지";
+  renderDebate();
+}
+function resetDebate() {
+  stopDebate();
+  debate = null;
+  $("debate-run").classList.add("hidden");
+  $("debate-setup").classList.remove("hidden");
+}
+
+// ---------- 초성 퀴즈 ----------
+const CHOSUNG = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+function toChosung(word) {
+  return [...word].map((ch) => {
+    const c = ch.charCodeAt(0);
+    return c >= 0xac00 && c <= 0xd7a3 ? CHOSUNG[Math.floor((c - 0xac00) / 588)] : ch;
+  }).join("");
+}
+function parseWordList(id) {
+  return [...new Set($(id).value.split(/[,\n]/).map((w) => w.trim()).filter(Boolean))];
+}
+let chosungPool = [], chosungSource = "", chosungCurrent = null;
+
+function nextChosung() {
+  const words = parseWordList("chosung-words");
+  if (!words.length) { toast("단어 목록을 먼저 입력해 주세요"); return; }
+  const source = words.join("|");
+  if (source !== chosungSource || !chosungPool.length) {
+    if (source === chosungSource) toast("한 바퀴 다 냈어요! 처음부터 다시 섞습니다 🔄");
+    chosungSource = source;
+    chosungPool = [...words];
+    for (let i = chosungPool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [chosungPool[i], chosungPool[j]] = [chosungPool[j], chosungPool[i]];
+    }
+  }
+  chosungCurrent = chosungPool.pop();
+  $("chosung-display").innerHTML = `<div class="quiz-word">${escapeHtml(toChosung(chosungCurrent))}</div>`;
+  $("chosung-remain").textContent = `남은 문제 ${chosungPool.length}개`;
+}
+function revealChosung() {
+  if (!chosungCurrent) { toast("먼저 '문제 내기'를 눌러 주세요"); return; }
+  $("chosung-display").innerHTML =
+    `<div class="quiz-word chosung-dim">${escapeHtml(toChosung(chosungCurrent))}</div>` +
+    `<div class="quiz-answer">${escapeHtml(chosungCurrent)}</div>`;
+}
+
+// ---------- 낱말 뽑기 ----------
+let wordPool = [], wordSource = "";
+function pickWord() {
+  const words = parseWordList("word-list");
+  if (!words.length) { toast("낱말 목록을 먼저 입력해 주세요"); return; }
+  const source = words.join("|");
+  if (source !== wordSource || !wordPool.length) {
+    if (source === wordSource) toast("모두 뽑았어요! 처음부터 다시 섞습니다 🔄");
+    wordSource = source;
+    wordPool = [...words];
+    for (let i = wordPool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [wordPool[i], wordPool[j]] = [wordPool[j], wordPool[i]];
+    }
+  }
+  const w = wordPool.pop();
+  $("word-display").innerHTML = `<div class="quiz-word">${escapeHtml(w)}</div>`;
+  $("word-remain").textContent = `남은 낱말 ${wordPool.length}개`;
+}
+
+// ---------- 글자 수·원고지 ----------
+function renderCharCount() {
+  const text = $("count-text").value;
+  const box = $("count-result");
+  if (!text) { box.innerHTML = ""; return; }
+  const withSpace = [...text.replace(/\r?\n/g, "")].length;
+  const noSpace = [...text.replace(/\s/g, "")].length;
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const pages = Math.ceil(withSpace / 200) || 0;
+  box.innerHTML = `
+    <div class="count-row"><span>공백 포함</span><b>${withSpace.toLocaleString()}자</b></div>
+    <div class="count-row"><span>공백 제외</span><b>${noSpace.toLocaleString()}자</b></div>
+    <div class="count-row"><span>어절 수</span><b>${words.toLocaleString()}개</b></div>
+    <div class="count-row"><span>원고지(200자)</span><b>약 ${pages}매</b></div>`;
+}
+
 // 새로운 이벤트 바인딩 추가
 function bindEventsNew() {
   // 시간표
@@ -2353,6 +2542,18 @@ function bindEventsNew() {
 
   // 도구 - 번호뽑기
   $("numberpick-btn")?.addEventListener("click", pickNumber);
+
+  // 도구 - 토론 타이머
+  $("debate-start-btn")?.addEventListener("click", startDebate);
+  $("debate-pause-btn")?.addEventListener("click", pauseDebate);
+  $("debate-skip-btn")?.addEventListener("click", skipDebateStage);
+  $("debate-reset-btn")?.addEventListener("click", resetDebate);
+
+  // 도구 - 초성 퀴즈 / 낱말 뽑기 / 글자 수
+  $("chosung-next-btn")?.addEventListener("click", nextChosung);
+  $("chosung-reveal-btn")?.addEventListener("click", revealChosung);
+  $("word-pick-btn")?.addEventListener("click", pickWord);
+  $("count-text")?.addEventListener("input", renderCharCount);
 
   // 도구 - 발표자 뽑기 (학년 바꾸면 학급 목록도 갱신)
   $("picker-btn")?.addEventListener("click", pickPresenter);

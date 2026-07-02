@@ -282,6 +282,57 @@
           <div id="group-result" class="group-result"></div>
         </div>
 
+        <div class="tool-card tool-card-wide">
+          <h3>⚖️ 토론 타이머</h3>
+          <div id="debate-setup">
+            <p class="muted" style="margin: 0 0 6px; font-size: 0.8rem;">한 줄에 하나씩 <b>단계 이름 분:초</b> — 수업에 맞게 고쳐 쓰세요</p>
+            <textarea id="debate-stages" rows="6" class="tool-textarea">찬성 입론 2:00
+반대 입론 2:00
+반대 반론 1:30
+찬성 반론 1:30
+찬성 최종 발언 1:00
+반대 최종 발언 1:00</textarea>
+            <button id="debate-start-btn" class="btn btn-primary btn-sm">토론 시작</button>
+          </div>
+          <div id="debate-run" class="hidden">
+            <div id="debate-stage-label" class="debate-stage-label"></div>
+            <div id="debate-timer" class="debate-timer">0:00</div>
+            <div id="debate-next" class="debate-next muted"></div>
+            <div class="tool-row" style="margin-top: 10px;">
+              <button id="debate-pause-btn" class="btn btn-sm">⏸ 일시정지</button>
+              <button id="debate-skip-btn" class="btn btn-sm btn-ghost">다음 단계 ▸</button>
+              <button id="debate-reset-btn" class="btn btn-sm btn-ghost">처음으로</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tool-card">
+          <h3>🔤 초성 퀴즈</h3>
+          <textarea id="chosung-words" rows="3" class="tool-textarea" placeholder="단어를 쉼표나 줄바꿈으로 구분해 입력&#10;예: 은유법, 직유법, 반어, 역설"></textarea>
+          <div class="tool-row">
+            <button id="chosung-next-btn" class="btn btn-primary btn-sm">문제 내기</button>
+            <button id="chosung-reveal-btn" class="btn btn-ghost btn-sm">정답 보기</button>
+            <span id="chosung-remain" class="muted"></span>
+          </div>
+          <div id="chosung-display" class="picker-result">단어 목록을 넣고 '문제 내기'를 누르세요</div>
+        </div>
+
+        <div class="tool-card">
+          <h3>🎰 낱말 뽑기</h3>
+          <textarea id="word-list" rows="3" class="tool-textarea" placeholder="어휘·작품·발표 주제를 쉼표나 줄바꿈으로 구분해 입력"></textarea>
+          <div class="tool-row">
+            <button id="word-pick-btn" class="btn btn-primary btn-sm">뽑기</button>
+            <span id="word-remain" class="muted"></span>
+          </div>
+          <div id="word-display" class="picker-result">목록에서 하나씩, 중복 없이 뽑아요</div>
+        </div>
+
+        <div class="tool-card">
+          <h3>📏 글자 수·원고지</h3>
+          <textarea id="count-text" rows="5" class="tool-textarea" placeholder="글을 붙여넣으면 바로 계산됩니다"></textarea>
+          <div id="count-result" class="count-result"></div>
+        </div>
+
         <div class="tool-card">
           <h3>🗳️ 투표</h3>
           <div class="vote-input">

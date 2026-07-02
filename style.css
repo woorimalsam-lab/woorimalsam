@@ -880,6 +880,40 @@ body {
 .picker-name b { color: var(--primary); }
 .picker-remain { font-size: 0.78rem; color: var(--muted); }
 
+/* ---------- 국어과 도구: 토론 타이머 / 초성 퀴즈 / 낱말 뽑기 / 글자 수 ---------- */
+.tool-textarea {
+  width: 100%; border: 1px solid var(--line); border-radius: 8px;
+  padding: 9px 11px; font-family: inherit; font-size: 0.86rem;
+  resize: vertical; margin-bottom: 10px; background: var(--panel); color: var(--ink);
+  line-height: 1.5;
+}
+.tool-textarea:focus { outline: none; border-color: var(--primary); }
+
+.debate-stage-label { text-align: center; font-weight: 800; font-size: 1.15rem; margin-bottom: 4px; }
+.debate-timer {
+  text-align: center; font-size: 3.4rem; font-weight: 800;
+  font-variant-numeric: tabular-nums; color: var(--primary);
+  background: var(--accent-soft); border-radius: 12px; padding: 12px;
+}
+.debate-timer.urgent { color: var(--danger); animation: debatePulse 1s infinite; }
+@keyframes debatePulse { 50% { opacity: 0.55; } }
+.debate-next { text-align: center; margin-top: 6px; font-size: 0.85rem; }
+
+.quiz-word { font-size: 2rem; font-weight: 800; letter-spacing: 4px; color: var(--ink); word-break: break-all; }
+.quiz-word.chosung-dim { font-size: 1rem; color: var(--muted); letter-spacing: 2px; }
+.quiz-answer { font-size: 1.7rem; font-weight: 800; color: var(--primary); margin-top: 4px; }
+
+.count-result { display: flex; flex-direction: column; gap: 6px; }
+.count-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; background: var(--accent-soft); border-radius: 8px; font-size: 0.88rem;
+}
+.count-row b { color: var(--primary); font-size: 1rem; }
+
+[data-theme="dark"] .tool-textarea { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .debate-timer { background: #262c3a; }
+[data-theme="dark"] .count-row { background: #262c3a; }
+
 /* 모둠 편성: 넓은 카드 + 명렬표 칩(모둠장 선택) */
 .tool-card-wide { grid-column: 1 / -1; }
 .group-roster { margin-bottom: 12px; }
