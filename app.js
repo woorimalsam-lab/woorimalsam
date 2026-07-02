@@ -645,7 +645,25 @@ function emptyNote(text) {
   return p;
 }
 
+// 홈 대시보드의 최근 메모 카드 (고정 우선 + 최신순 5개)
+function renderDashMemos() {
+  const box = $("dash-memos");
+  if (!box) return;
+  const memos = [...state.memos].sort(byPinnedThenDate).slice(0, 5);
+  if (!memos.length) {
+    box.innerHTML = '<div class="today-timetable-empty">메모가 없습니다. 메모 탭에서 작성해 보세요.</div>';
+    return;
+  }
+  box.innerHTML = memos.map((m) => `
+    <div class="dash-memo mc-${m.color || "default"}" title="메모 탭으로 이동">
+      ${m.pinned ? '<span class="dash-memo-pin">📌</span>' : ""}
+      <span class="dash-memo-text">${escapeHtml(m.text)}</span>
+      ${m.category ? `<span class="dash-memo-cat">${escapeHtml(m.category)}</span>` : ""}
+    </div>`).join("");
+}
+
 function renderMemos() {
+  renderDashMemos();
   rebuildMemoCats();
   renderMemoCatSelect();
 
@@ -1120,6 +1138,7 @@ function renderDashboard() {
   renderTodayEvents();
   renderTodayTimetable();
   renderTodos();
+  renderDashMemos();
 }
 
 // ============================================================
@@ -1320,6 +1339,9 @@ function bindEvents() {
   // 할 일
   $("add-todo-btn").addEventListener("click", addTodo);
   $("todo-text").addEventListener("keydown", (e) => { if (e.key === "Enter") addTodo(); });
+
+  // 홈의 최근 메모 → 누르면 메모 탭으로
+  $("dash-memos")?.addEventListener("click", () => setView("memo"));
 
   $("add-memo-btn").addEventListener("click", addMemo);
   $("add-memo-cat").addEventListener("click", addMemoCategory);
