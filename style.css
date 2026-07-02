@@ -685,8 +685,8 @@ body {
 }
 .student-tab-btn:hover { color: var(--ink); }
 .student-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
-.student-tab-content { display: none; }
-.student-tab-content.active { display: block; }
+/* 탭 내용 표시/숨김은 전역 .hidden 클래스로 처리 (JS와 일치) */
+.student-tab-content { display: block; margin-bottom: 4px; }
 
 .student-controls { display: flex; gap: 8px; margin-bottom: 16px; }
 .student-controls input { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
