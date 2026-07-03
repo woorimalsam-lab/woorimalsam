@@ -8,5 +8,3 @@ Thumbs.db
 *명렬표*
 *.pdf
 
-# 설정 파일 (API Key 등)
-config.js
