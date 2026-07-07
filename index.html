@@ -24,6 +24,7 @@
     <button class="navbtn" data-view="timetable"><span class="navicon">🕐</span>시간표</button>
     <button class="navbtn" data-view="seating"><span class="navicon">🪑</span>자리배치</button>
     <button class="navbtn" data-view="students"><span class="navicon">👥</span>학생</button>
+    <button class="navbtn" data-view="attendance"><span class="navicon">📋</span>출결</button>
     <button class="navbtn" data-view="calendar"><span class="navicon">📅</span>달력</button>
     <button class="navbtn" data-view="memo"><span class="navicon">📝</span>메모</button>
     <button class="navbtn" data-view="tools"><span class="navicon">🛠️</span>도구</button>
@@ -172,6 +173,35 @@
 
         <div id="student-class-filter" class="student-class-filter"></div>
         <div class="students-list" id="students-list"></div>
+      </div>
+    </section>
+
+    <!-- ============ 출결 관리 ============ -->
+    <section id="view-attendance" class="view hidden">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>출결 관리</h2>
+          <button id="att-export-btn" class="btn btn-ghost btn-sm">📥 이번 달 엑셀</button>
+        </div>
+
+        <div class="att-toolbar">
+          <select id="att-grade" title="학년"></select>
+          <select id="att-class" title="반"></select>
+          <div class="att-datenav">
+            <button id="att-prev" class="btn btn-icon" title="이전 날">‹</button>
+            <input id="att-date" type="date" />
+            <button id="att-next" class="btn btn-icon" title="다음 날">›</button>
+            <button id="att-today" class="btn btn-ghost btn-sm">오늘</button>
+          </div>
+        </div>
+
+        <div id="att-dayinfo" class="att-dayinfo"></div>
+        <div id="att-summary" class="att-summary"></div>
+        <div id="att-list" class="att-list"></div>
+
+        <div class="att-actions">
+          <button id="att-allpresent" class="btn btn-ghost btn-sm">이 날짜 전체 출석으로 초기화</button>
+        </div>
       </div>
     </section>
 

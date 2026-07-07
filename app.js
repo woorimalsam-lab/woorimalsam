@@ -1243,7 +1243,7 @@ function renderTodos() {
 // ============================================================
 function setView(name) {
   state.activeView = name;
-  const allViews = ["home", "timetable", "seating", "students", "calendar", "memo", "tools", "settings"];
+  const allViews = ["home", "timetable", "seating", "students", "attendance", "calendar", "memo", "tools", "settings"];
   for (const v of allViews) {
     const el = $("view-" + v);
     if (el) el.classList.toggle("hidden", v !== name);
@@ -1255,6 +1255,7 @@ function setView(name) {
   if (name === "timetable") renderTimetable();
   if (name === "seating") renderSeating();
   if (name === "students") renderStudents();
+  if (name === "attendance") renderAttendance();
   if (name === "calendar") { renderCalendar(); if (state.selected) renderDayDetail(); }
   if (name === "memo") renderMemos();
   if (name === "tools") renderToolClassSelects();
@@ -2187,6 +2188,142 @@ function clearPickLog() {
   renderPickerHistory();
 }
 
+// ============================================================
+//  출결 관리 — 날짜별 학급 출결부 (학사일정 달력 연동)
+// ============================================================
+const LOCAL_ATTENDANCE_KEY = "myplanner.attendance";
+const ATT_STATUSES = ["출석", "지각", "조퇴", "결석"];
+// 저장 구조: { "YYYY-MM-DD": { "학년-반": { 학생id: {s: 상태, n: 비고} } } }
+// 출석(기본값)이고 비고가 없으면 저장하지 않음 → 예외만 기록
+let attendance = {};
+let attDate = "";
+
+function loadAttendance() {
+  const a = loadLocal(LOCAL_ATTENDANCE_KEY);
+  attendance = (a && !Array.isArray(a)) ? a : {};
+  attDate = todayStr();
+}
+function saveAttendance() {
+  saveLocal(LOCAL_ATTENDANCE_KEY, attendance);
+}
+function attKey() {
+  return `${$("att-grade")?.value ?? ""}-${$("att-class")?.value ?? ""}`;
+}
+function attRecords() {
+  return (attendance[attDate] || {})[attKey()] || {};
+}
+function setAttRecord(sid, patch) {
+  const day = (attendance[attDate] ||= {});
+  const cls = (day[attKey()] ||= {});
+  const rec = { s: "출석", n: "", ...(cls[sid] || {}), ...patch };
+  if (rec.s === "출석" && !rec.n.trim()) delete cls[sid];   // 기본 상태는 저장 안 함
+  else cls[sid] = rec;
+  if (!Object.keys(cls).length) delete day[attKey()];
+  if (!Object.keys(day).length) delete attendance[attDate];
+  saveAttendance();
+}
+function shiftAttDate(delta) {
+  const [y, m, d] = attDate.split("-").map(Number);
+  attDate = ymd(new Date(y, m - 1, d + delta));
+  renderAttendance();
+}
+// 학사일정 기준 휴일/주말 여부
+function isSchoolOff(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const wd = new Date(y, m - 1, d).getDay();
+  if (wd === 0 || wd === 6) return "주말";
+  if (academicEvents.some((a) => a.date === dateStr && a.holiday)) return "휴일";
+  return null;
+}
+
+function renderAttendance() {
+  const list = $("att-list");
+  if (!list) return;
+  fillGradeClassSelects("att-grade", "att-class");
+  $("att-date").value = attDate;
+
+  // 날짜 정보: 학사일정·휴일 표시 (달력 데이터 연동)
+  const [y, m, d] = attDate.split("-").map(Number);
+  const wd = "일월화수목금토"[new Date(y, m - 1, d).getDay()];
+  const evs = academicEvents.filter((a) => a.date === attDate);
+  const off = isSchoolOff(attDate);
+  let info = `${m}월 ${d}일 (${wd})`;
+  if (evs.length) info += ` · 📌 ${evs.map((a) => a.title).join(" · ")}`;
+  $("att-dayinfo").innerHTML = off
+    ? `<span class="att-off">⚠️ ${info} — ${off}입니다</span>`
+    : info;
+
+  const pool = toolStudents("att-grade", "att-class");
+  if (!pool.length) {
+    $("att-summary").innerHTML = "";
+    list.innerHTML = '<p class="muted" style="text-align:center; padding: 20px;">\'학생\' 메뉴에서 명렬표를 먼저 올려 주세요.</p>';
+    return;
+  }
+
+  const recs = attRecords();
+  const counts = { 출석: 0, 지각: 0, 조퇴: 0, 결석: 0 };
+  const rows = pool.map((s) => {
+    const r = recs[s.id] || { s: "출석", n: "" };
+    counts[r.s] = (counts[r.s] || 0) + 1;
+    return `
+    <div class="att-row" data-sid="${s.id}">
+      <span class="att-name">${s.number ? `<b>${escapeHtml(s.number)}</b> ` : ""}${escapeHtml(s.name)}</span>
+      <div class="att-seg">${ATT_STATUSES.map((st) =>
+        `<button class="att-btn st-${st}${r.s === st ? " active" : ""}" data-st="${st}">${st}</button>`).join("")}</div>
+      <input class="att-note" placeholder="비고(사유)" value="${escapeHtml(r.n || "")}" />
+    </div>`;
+  });
+
+  $("att-summary").innerHTML =
+    ATT_STATUSES.map((st) => `<span class="att-chip st-${st}${counts[st] ? " has" : ""}">${st} ${counts[st] || 0}</span>`).join("") +
+    `<span class="muted" style="margin-left: 4px;">/ ${pool.length}명</span>`;
+  list.innerHTML = rows.join("");
+}
+
+// 이번 달 출결부 엑셀 내보내기 (지=지각, 조=조퇴, 결=결석, -=휴일·주말)
+async function exportAttendanceMonth() {
+  const pool = toolStudents("att-grade", "att-class");
+  if (!pool.length) { toast("'학생' 메뉴에서 명렬표를 먼저 올려 주세요"); return; }
+  try { await ensureXLSX(); } catch (e) { toast(e.message); return; }
+
+  const [y, m] = attDate.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const key = attKey();
+
+  const header = ["번호", "이름"];
+  const dayMeta = [];
+  for (let d = 1; d <= lastDay; d++) {
+    const ds = `${y}-${pad(m)}-${pad(d)}`;
+    dayMeta.push({ ds, off: !!isSchoolOff(ds) });
+    header.push(`${d}(${"일월화수목금토"[new Date(y, m - 1, d).getDay()]})`);
+  }
+  header.push("지각", "조퇴", "결석");
+
+  const rows = [header];
+  for (const s of pool) {
+    const row = [s.number, s.name];
+    let late = 0, early = 0, absent = 0;
+    for (const dm of dayMeta) {
+      if (dm.off) { row.push("-"); continue; }
+      const r = attendance[dm.ds]?.[key]?.[s.id];
+      if (!r || r.s === "출석") { row.push(""); continue; }
+      if (r.s === "지각") { row.push("지"); late++; }
+      else if (r.s === "조퇴") { row.push("조"); early++; }
+      else { row.push("결"); absent++; }
+    }
+    row.push(late, early, absent);
+    rows.push(row);
+  }
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 5 }, { wch: 10 }, ...dayMeta.map(() => ({ wch: 5 })), { wch: 5 }, { wch: 5 }, { wch: 5 }];
+  XLSX.utils.book_append_sheet(wb, ws, `${m}월 출결`);
+  const g = $("att-grade")?.value, c = $("att-class")?.value;
+  XLSX.writeFile(wb, `출결_${g ? g + "학년" : ""}${c ? c + "반" : ""}_${y}-${pad(m)}.xlsx`);
+  toast("📥 이번 달 출결부를 엑셀로 저장했습니다");
+}
+
 // 모둠 편성: 명렬표에서 모둠장을 클릭해 고르면, 나머지는 랜덤 배분
 function renderGroupRoster() {
   const box = $("group-roster");
@@ -2666,6 +2803,42 @@ function bindEventsNew() {
   $("word-pick-btn")?.addEventListener("click", pickWord);
   $("count-text")?.addEventListener("input", renderCharCount);
 
+  // 출결 관리
+  $("att-grade")?.addEventListener("change", () => {
+    fillGradeClassSelects("att-grade", "att-class");
+    renderAttendance();
+  });
+  $("att-class")?.addEventListener("change", renderAttendance);
+  $("att-date")?.addEventListener("change", (e) => {
+    if (e.target.value) { attDate = e.target.value; renderAttendance(); }
+  });
+  $("att-prev")?.addEventListener("click", () => shiftAttDate(-1));
+  $("att-next")?.addEventListener("click", () => shiftAttDate(1));
+  $("att-today")?.addEventListener("click", () => { attDate = todayStr(); renderAttendance(); });
+  // 상태 버튼 (이벤트 위임)
+  $("att-list")?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".att-btn");
+    if (!btn) return;
+    const sid = btn.closest(".att-row")?.dataset.sid;
+    if (sid) { setAttRecord(sid, { s: btn.dataset.st }); renderAttendance(); }
+  });
+  // 비고 입력 (렌더링하지 않고 저장만 — 입력 포커스 유지)
+  $("att-list")?.addEventListener("change", (e) => {
+    if (!e.target.classList.contains("att-note")) return;
+    const sid = e.target.closest(".att-row")?.dataset.sid;
+    if (sid) setAttRecord(sid, { n: e.target.value });
+  });
+  $("att-allpresent")?.addEventListener("click", () => {
+    const key = attKey();
+    if (!attendance[attDate]?.[key]) { toast("이미 전원 출석 상태입니다"); return; }
+    if (!confirm("이 날짜의 기록(지각·조퇴·결석·비고)을 모두 지우고 전원 출석으로 되돌릴까요?")) return;
+    delete attendance[attDate][key];
+    if (!Object.keys(attendance[attDate]).length) delete attendance[attDate];
+    saveAttendance();
+    renderAttendance();
+  });
+  $("att-export-btn")?.addEventListener("click", exportAttendanceMonth);
+
   // 도구 - 발표자 뽑기 (학년 바꾸면 학급 목록도 갱신, 학급 바꾸면 기록 갱신)
   $("picker-btn")?.addEventListener("click", pickPresenter);
   $("picker-grade")?.addEventListener("change", () => {
@@ -2708,6 +2881,7 @@ async function start() {
   loadStudents();
   loadSettings();
   loadPickLog();
+  loadAttendance();
 
   // 현재 교시 하이라이트를 1분마다 갱신
   setInterval(() => {

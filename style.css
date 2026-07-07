@@ -895,6 +895,70 @@ body {
 .picker-history-list li b { color: var(--primary); }
 .picker-history-time { margin-left: 6px; font-size: 0.72rem; color: var(--muted); }
 
+/* ---------- 출결 관리 ---------- */
+.att-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.att-toolbar select { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); }
+.att-datenav { display: flex; align-items: center; gap: 4px; }
+.att-datenav input[type="date"] { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); }
+
+.att-dayinfo { font-size: 0.88rem; font-weight: 600; margin-bottom: 8px; }
+.att-off { color: var(--danger); }
+
+.att-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.att-chip {
+  font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--muted);
+}
+.att-chip.st-출석 { background: #e9f7f0; color: #14764b; }
+.att-chip.st-지각.has { background: #fdf2e2; color: #a8650f; }
+.att-chip.st-조퇴.has { background: #eef3ff; color: #2a53c7; }
+.att-chip.st-결석.has { background: #fdecec; color: #c02c31; }
+
+.att-list { display: flex; flex-direction: column; gap: 6px; }
+.att-row {
+  display: grid; grid-template-columns: minmax(84px, 150px) auto 1fr;
+  align-items: center; gap: 8px;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px;
+}
+.att-name { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.att-name b { color: var(--primary); }
+.att-seg { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.att-btn {
+  border: none; background: var(--panel); color: var(--muted);
+  font-family: inherit; font-size: 0.78rem; font-weight: 600;
+  padding: 6px 10px; cursor: pointer; border-right: 1px solid var(--line);
+}
+.att-btn:last-child { border-right: none; }
+.att-btn:hover { background: var(--accent-soft); }
+.att-btn.active.st-출석 { background: #1c9963; color: #fff; }
+.att-btn.active.st-지각 { background: #e08a1e; color: #fff; }
+.att-btn.active.st-조퇴 { background: #3b6ef5; color: #fff; }
+.att-btn.active.st-결석 { background: #e5484d; color: #fff; }
+.att-note {
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px;
+  font-family: inherit; font-size: 0.8rem; min-width: 0;
+  background: var(--panel); color: var(--ink);
+}
+.att-note:focus { outline: none; border-color: var(--primary); }
+.att-actions { margin-top: 14px; }
+
+@media (max-width: 640px) {
+  .att-row { grid-template-columns: 1fr auto; }
+  .att-note { grid-column: 1 / -1; }
+}
+
+[data-theme="dark"] .att-toolbar select, [data-theme="dark"] .att-datenav input[type="date"],
+[data-theme="dark"] .att-note { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .att-row { border-color: #2a2e38; }
+[data-theme="dark"] .att-seg { border-color: #2a2e38; }
+[data-theme="dark"] .att-btn { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .att-btn:hover { background: #262c3a; }
+[data-theme="dark"] .att-chip { background: #262c3a; }
+[data-theme="dark"] .att-chip.st-출석 { background: #1e3a2b; color: #7fd3a8; }
+[data-theme="dark"] .att-chip.st-지각.has { background: #3a2f22; color: #eab676; }
+[data-theme="dark"] .att-chip.st-조퇴.has { background: #1f2c48; color: #8fb0ff; }
+[data-theme="dark"] .att-chip.st-결석.has { background: #3a2526; color: #f29a9d; }
+
 /* ---------- 국어과 도구: 토론 타이머 / 초성 퀴즈 / 낱말 뽑기 / 글자 수 ---------- */
 .tool-textarea {
   width: 100%; border: 1px solid var(--line); border-radius: 8px;
