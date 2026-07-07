@@ -834,6 +834,7 @@ body {
   background: #2e5339; color: #e8f2ea; border-radius: 8px;
   padding: 8px; margin-bottom: 12px;
 }
+.seating-board.bottom { margin: 12px 0 0; }
 .seating-seat { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 4px; }
 .seating-seat.empty { color: var(--muted); border-style: dashed; }
 .seating-hint { margin: 10px 0 0; }

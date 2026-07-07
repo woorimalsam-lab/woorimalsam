@@ -1595,10 +1595,14 @@ function renderSeating() {
 
   const { rows, cols, pair, view } = state.seating;
   const grid = currentGrid();
+  const teacher = view === "teacher";
 
-  // 교탁에서 본 배치 = 좌우 반전 (앞줄은 두 방향 모두 칠판 바로 아래)
+  // 교탁에서 본 배치 = 좌우 반전 + 앞줄이 아래(교탁 앞)로 오도록 상하 반전,
+  // 교탁은 그림 아래쪽에 배치 → 교탁에 서서 보는 방향과 일치
   const colOrder = [];
-  for (let c = 0; c < cols; c++) colOrder.push(view === "teacher" ? cols - 1 - c : c);
+  for (let c = 0; c < cols; c++) colOrder.push(teacher ? cols - 1 - c : c);
+  const rowOrder = [];
+  for (let r = 0; r < rows; r++) rowOrder.push(teacher ? rows - 1 - r : r);
 
   // 줄 묶음: pair개 열마다 통로(간격) 삽입
   const template = [];
@@ -1608,11 +1612,11 @@ function renderSeating() {
   });
 
   const g = state.seating.currentGrade, c2 = state.seating.currentClass;
-  const viewLabel = view === "teacher" ? "교탁에서 본 배치" : "학생석에서 본 배치";
+  const viewLabel = teacher ? "교탁에서 본 배치" : "학생석에서 본 배치";
   let html = `<div class="seating-print-title">${g ? g + "학년 " : ""}${c2 ? c2 + "반 " : ""}좌석표 · ${viewLabel} · ${todayStr()}</div>`;
-  html += `<div class="seating-board">${view === "teacher" ? "교탁 (칠판)" : "칠판 · 교탁"}</div>`;
+  if (!teacher) html += '<div class="seating-board">칠판 · 교탁</div>';
   html += `<div class="seating-grid" style="grid-template-columns: ${template.join(" ")}">`;
-  for (let r = 0; r < rows; r++) {
+  for (const r of rowOrder) {
     colOrder.forEach((c, i) => {
       const seat = grid[r]?.[c];
       const sel = seatPicked && seatPicked.r === r && seatPicked.c === c;
@@ -1624,6 +1628,7 @@ function renderSeating() {
     });
   }
   html += "</div>";
+  if (teacher) html += '<div class="seating-board bottom">교탁 (칠판)</div>';
   html += '<p class="seating-hint muted">좌석을 하나 누른 뒤 다른 좌석을 누르면 서로 자리가 바뀝니다. 인쇄는 현재 화면의 방향·묶음 그대로 나갑니다.</p>';
   display.innerHTML = html;
 }
