@@ -965,10 +965,14 @@ body {
 }
 .att-btn:last-child { border-right: none; }
 .att-btn:hover { background: var(--accent-soft); }
+.att-segwrap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .att-btn.active.st-출석 { background: #1c9963; color: #fff; }
 .att-btn.active.st-지각 { background: #e08a1e; color: #fff; }
 .att-btn.active.st-조퇴 { background: #3b6ef5; color: #fff; }
 .att-btn.active.st-결석 { background: #e5484d; color: #fff; }
+.att-btn.active.tp-질병 { background: #7c3aed; color: #fff; }
+.att-btn.active.tp-인정 { background: #0d9488; color: #fff; }
+.att-btn.active.tp-미인정 { background: #64748b; color: #fff; }
 .att-note {
   border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px;
   font-family: inherit; font-size: 0.8rem; min-width: 0;

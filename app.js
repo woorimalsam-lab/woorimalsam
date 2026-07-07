@@ -2231,9 +2231,10 @@ function clearPickLog() {
 //  출결 관리 — 날짜별 학급 출결부 (학사일정 달력 연동)
 // ============================================================
 const LOCAL_ATTENDANCE_KEY = "myplanner.attendance";
-const ATT_STATUSES = ["출석", "지각", "조퇴", "결석"];
-// 저장 구조: { "YYYY-MM-DD": { "학년-반": { 학생id: {s: 상태, n: 비고} } } }
-// 출석(기본값)이고 비고가 없으면 저장하지 않음 → 예외만 기록
+const ATT_TYPES = ["질병", "인정", "미인정"];      // 사유 유형 (나이스 기준)
+const ATT_RESULTS = ["지각", "조퇴", "결석"];      // 결과
+// 저장 구조: { "YYYY-MM-DD": { "학년-반": { 학생id: {s: 결과, t: 유형, n: 비고} } } }
+// 예: 질병+결석 → {s:"결석", t:"질병"} = 질병결석. 출석(기본값)이고 유형·비고 없으면 저장 안 함
 let attendance = {};
 let attDate = "";
 
@@ -2254,12 +2255,16 @@ function attRecords() {
 function setAttRecord(sid, patch) {
   const day = (attendance[attDate] ||= {});
   const cls = (day[attKey()] ||= {});
-  const rec = { s: "출석", n: "", ...(cls[sid] || {}), ...patch };
-  if (rec.s === "출석" && !rec.n.trim()) delete cls[sid];   // 기본 상태는 저장 안 함
+  const rec = { s: "출석", t: "", n: "", ...(cls[sid] || {}), ...patch };
+  if (rec.s === "출석" && !rec.t && !rec.n.trim()) delete cls[sid];   // 기본 상태는 저장 안 함
   else cls[sid] = rec;
   if (!Object.keys(cls).length) delete day[attKey()];
   if (!Object.keys(day).length) delete attendance[attDate];
   saveAttendance();
+}
+// 기록 표시용 라벨: 유형+결과 (예: 질병결석, 인정지각, 유형 없으면 결석)
+function attLabel(rec) {
+  return rec.s === "출석" ? "출석" : `${rec.t || ""}${rec.s}`;
 }
 function shiftAttDate(delta) {
   const [y, m, d] = attDate.split("-").map(Number);
@@ -2302,19 +2307,26 @@ function renderAttendance() {
   const recs = attRecords();
   const counts = { 출석: 0, 지각: 0, 조퇴: 0, 결석: 0 };
   const rows = pool.map((s) => {
-    const r = recs[s.id] || { s: "출석", n: "" };
+    const r = { s: "출석", t: "", n: "", ...(recs[s.id] || {}) };
     counts[r.s] = (counts[r.s] || 0) + 1;
     return `
     <div class="att-row" data-sid="${s.id}">
       <span class="att-name">${s.number ? `<b>${escapeHtml(s.number)}</b> ` : ""}${escapeHtml(s.name)}</span>
-      <div class="att-seg">${ATT_STATUSES.map((st) =>
-        `<button class="att-btn st-${st}${r.s === st ? " active" : ""}" data-st="${st}">${st}</button>`).join("")}</div>
+      <div class="att-segwrap">
+        <div class="att-seg">
+          <button class="att-btn st-출석${r.s === "출석" && !r.t ? " active" : ""}" data-att-ok="1">출석</button>
+        </div>
+        <div class="att-seg">${ATT_TYPES.map((tp) =>
+          `<button class="att-btn tp-${tp}${r.t === tp ? " active" : ""}" data-att-type="${tp}">${tp}</button>`).join("")}</div>
+        <div class="att-seg">${ATT_RESULTS.map((st) =>
+          `<button class="att-btn st-${st}${r.s === st ? " active" : ""}" data-att-res="${st}">${st}</button>`).join("")}</div>
+      </div>
       <input class="att-note" placeholder="비고(사유)" value="${escapeHtml(r.n || "")}" />
     </div>`;
   });
 
   $("att-summary").innerHTML =
-    ATT_STATUSES.map((st) => `<span class="att-chip st-${st}${counts[st] ? " has" : ""}">${st} ${counts[st] || 0}</span>`).join("") +
+    ["출석", ...ATT_RESULTS].map((st) => `<span class="att-chip st-${st}${st !== "출석" && counts[st] ? " has" : ""}">${st} ${counts[st] || 0}</span>`).join("") +
     `<span class="muted" style="margin-left: 4px;">/ ${pool.length}명</span>`;
   list.innerHTML = rows.join("");
 }
@@ -2351,12 +2363,13 @@ async function exportAttendanceMonth() {
       if (r.s === "지각") late++;
       else if (r.s === "조퇴") early++;
       else if (r.s === "결석") absent++;
-      // 상태를 그대로 쓰고, 사유가 있으면 괄호로 병기 (출석+사유만 있으면 사유만)
-      let cell = r.s === "출석" ? "" : r.s;
+      // 유형+결과를 그대로 기록(질병결석·인정지각 등), 사유는 괄호 병기
+      const label = attLabel(r);
+      let cell = r.s === "출석" ? "" : label;
       if (note) cell = cell ? `${cell}(${note})` : `(${note})`;
       row.push(cell);
       if (r.s !== "출석" || note) {
-        noteList.push(`${Number(dm.ds.slice(8))}일 ${r.s}${note ? `(${note})` : ""}`);
+        noteList.push(`${Number(dm.ds.slice(8))}일 ${label}${note ? `(${note})` : ""}`);
       }
     }
     row.push(late, early, absent, noteList.join(", "));
@@ -2874,12 +2887,24 @@ function bindEventsNew() {
   $("att-prev")?.addEventListener("click", () => shiftAttDate(-1));
   $("att-next")?.addEventListener("click", () => shiftAttDate(1));
   $("att-today")?.addEventListener("click", () => { attDate = todayStr(); renderAttendance(); });
-  // 상태 버튼 (이벤트 위임)
+  // 상태 버튼 (이벤트 위임): 출석 / 유형(질병·인정·미인정) / 결과(지각·조퇴·결석)
   $("att-list")?.addEventListener("click", (e) => {
     const btn = e.target.closest(".att-btn");
     if (!btn) return;
     const sid = btn.closest(".att-row")?.dataset.sid;
-    if (sid) { setAttRecord(sid, { s: btn.dataset.st }); renderAttendance(); }
+    if (!sid) return;
+    const cur = { s: "출석", t: "", ...(attRecords()[sid] || {}) };
+
+    if (btn.dataset.attOk) {
+      setAttRecord(sid, { s: "출석", t: "" });               // 출석 = 유형·결과 모두 해제
+    } else if (btn.dataset.attType) {
+      const tp = btn.dataset.attType;
+      setAttRecord(sid, { t: cur.t === tp ? "" : tp });      // 같은 유형 다시 누르면 해제
+    } else if (btn.dataset.attRes) {
+      const st = btn.dataset.attRes;
+      setAttRecord(sid, { s: cur.s === st ? "출석" : st });  // 같은 결과 다시 누르면 출석으로
+    }
+    renderAttendance();
   });
   // 비고 입력 (렌더링하지 않고 저장만 — 입력 포커스 유지)
   $("att-list")?.addEventListener("change", (e) => {
