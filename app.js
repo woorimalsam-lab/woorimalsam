@@ -2188,11 +2188,9 @@ function renderPickerHistory() {
        <button id="picklog-clear-btn" class="btn btn-ghost btn-sm">기록 지우기</button>
      </div>
      <ol class="picker-history-list">` +
-    log.map((p) => {
-      const t = new Date(p.at);
-      const hm = isNaN(t) ? "" : `${pad(t.getHours())}:${pad(t.getMinutes())}`;
-      return `<li>${p.number ? `<b>${escapeHtml(p.number)}번</b> ` : ""}${escapeHtml(p.name)}<span class="picker-history-time">${hm}</span></li>`;
-    }).join("") +
+    log.map((p) =>
+      `<li>${p.number ? `<b>${escapeHtml(p.number)}번</b> ` : ""}${escapeHtml(p.name)}</li>`
+    ).join("") +
     "</ol>";
 }
 
@@ -2206,15 +2204,13 @@ async function exportPickLog() {
     toast(e.message);
     return;
   }
-  const rows = [["순서", "학년", "반", "번호", "이름", "뽑은 시각"]];
+  const rows = [["순서", "학년", "반", "번호", "이름"]];
   log.forEach((p, i) => {
-    const t = new Date(p.at);
-    const at = isNaN(t) ? "" : `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())} ${pad(t.getHours())}:${pad(t.getMinutes())}`;
-    rows.push([i + 1, p.grade, p.class, p.number, p.name, at]);
+    rows.push([i + 1, p.grade, p.class, p.number, p.name]);
   });
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"] = [{ wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 14 }, { wch: 18 }];
+  ws["!cols"] = [{ wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 6 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, ws, "발표자 뽑기");
   const g = $("picker-grade")?.value, c = $("picker-class")?.value;
   const today = todayStr();
