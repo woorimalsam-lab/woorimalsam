@@ -2482,6 +2482,30 @@ function updateObservation(sid, oid, text) {
   saveObservations();
 }
 
+// 선택한 학급의 관찰 기록 전체를 엑셀로 (번호순 → 날짜순)
+async function exportObservations() {
+  const pool = toolStudents("obs-grade", "obs-class");
+  if (!pool.length) { toast("'학생' 메뉴에서 명렬표를 먼저 올려 주세요"); return; }
+
+  const rows = [["학년", "반", "번호", "이름", "날짜", "관찰 내용"]];
+  for (const s of pool) {
+    const recs = [...(observations[s.id] || [])].sort((a, b) => a.date.localeCompare(b.date));
+    for (const r of recs) {
+      rows.push([s.grade || "", s.class || "", s.number || "", s.name, r.date, r.text]);
+    }
+  }
+  if (rows.length === 1) { toast("내보낼 관찰 기록이 없습니다"); return; }
+
+  try { await ensureXLSX(); } catch (e) { toast(e.message); return; }
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 5 }, { wch: 5 }, { wch: 5 }, { wch: 10 }, { wch: 12 }, { wch: 60 }];
+  XLSX.utils.book_append_sheet(wb, ws, "학생관찰");
+  const g = $("obs-grade")?.value, c = $("obs-class")?.value;
+  XLSX.writeFile(wb, `학생관찰_${g ? g + "학년" : ""}${c ? c + "반" : ""}_${todayStr()}.xlsx`);
+  toast(`📥 관찰 기록 ${rows.length - 1}건을 엑셀로 저장했습니다`);
+}
+
 // 모둠 편성: 명렬표에서 모둠장을 클릭해 고르면, 나머지는 랜덤 배분
 function renderGroupRoster() {
   const box = $("group-roster");
@@ -3028,6 +3052,7 @@ function bindEventsNew() {
   $("obs-class")?.addEventListener("change", renderObservations);
   $("obs-student")?.addEventListener("change", renderObservations);
   $("obs-add-btn")?.addEventListener("click", addObservation);
+  $("obs-export-btn")?.addEventListener("click", exportObservations);
   $("obs-text")?.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") addObservation();
   });
