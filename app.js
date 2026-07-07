@@ -2323,7 +2323,7 @@ function renderAttendance() {
   list.innerHTML = rows.join("");
 }
 
-// 이번 달 출결부 엑셀 내보내기 (지=지각, 조=조퇴, 결=결석, -=휴일·주말)
+// 이번 달 출결부 엑셀 내보내기 — 선택한 상태 그대로(지각/조퇴/결석) + 사유 병기, -=휴일·주말
 async function exportAttendanceMonth() {
   const pool = toolStudents("att-grade", "att-class");
   if (!pool.length) { toast("'학생' 메뉴에서 명렬표를 먼저 올려 주세요"); return; }
@@ -2340,31 +2340,40 @@ async function exportAttendanceMonth() {
     dayMeta.push({ ds, off: !!isSchoolOff(ds) });
     header.push(`${d}(${"일월화수목금토"[new Date(y, m - 1, d).getDay()]})`);
   }
-  header.push("지각", "조퇴", "결석");
+  header.push("지각", "조퇴", "결석", "비고 모음");
 
   const rows = [header];
   for (const s of pool) {
     const row = [s.number, s.name];
     let late = 0, early = 0, absent = 0;
+    const noteList = [];
     for (const dm of dayMeta) {
       if (dm.off) { row.push("-"); continue; }
       const r = attendance[dm.ds]?.[key]?.[s.id];
-      if (!r || r.s === "출석") { row.push(""); continue; }
-      if (r.s === "지각") { row.push("지"); late++; }
-      else if (r.s === "조퇴") { row.push("조"); early++; }
-      else { row.push("결"); absent++; }
+      if (!r) { row.push(""); continue; }
+      const note = (r.n || "").trim();
+      if (r.s === "지각") late++;
+      else if (r.s === "조퇴") early++;
+      else if (r.s === "결석") absent++;
+      // 상태를 그대로 쓰고, 사유가 있으면 괄호로 병기 (출석+사유만 있으면 사유만)
+      let cell = r.s === "출석" ? "" : r.s;
+      if (note) cell = cell ? `${cell}(${note})` : `(${note})`;
+      row.push(cell);
+      if (r.s !== "출석" || note) {
+        noteList.push(`${Number(dm.ds.slice(8))}일 ${r.s}${note ? `(${note})` : ""}`);
+      }
     }
-    row.push(late, early, absent);
+    row.push(late, early, absent, noteList.join(", "));
     rows.push(row);
   }
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"] = [{ wch: 5 }, { wch: 10 }, ...dayMeta.map(() => ({ wch: 5 })), { wch: 5 }, { wch: 5 }, { wch: 5 }];
+  ws["!cols"] = [{ wch: 5 }, { wch: 10 }, ...dayMeta.map(() => ({ wch: 9 })), { wch: 5 }, { wch: 5 }, { wch: 5 }, { wch: 40 }];
   XLSX.utils.book_append_sheet(wb, ws, `${m}월 출결`);
   const g = $("att-grade")?.value, c = $("att-class")?.value;
   XLSX.writeFile(wb, `출결_${g ? g + "학년" : ""}${c ? c + "반" : ""}_${y}-${pad(m)}.xlsx`);
-  toast("📥 이번 달 출결부를 엑셀로 저장했습니다");
+  toast("📥 이번 달 출결부를 엑셀로 저장했습니다 (상태·사유 포함)");
 }
 
 // 모둠 편성: 명렬표에서 모둠장을 클릭해 고르면, 나머지는 랜덤 배분
