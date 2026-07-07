@@ -998,6 +998,43 @@ body {
 [data-theme="dark"] .att-chip.st-조퇴.has { background: #1f2c48; color: #8fb0ff; }
 [data-theme="dark"] .att-chip.st-결석.has { background: #3a2526; color: #f29a9d; }
 
+/* ---------- 학생관찰 기록 ---------- */
+.obs-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.obs-toolbar select { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); }
+#obs-student { min-width: 140px; }
+
+.obs-compose { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.obs-compose input[type="date"] { padding: 8px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); }
+.obs-compose textarea {
+  flex: 1; min-width: 200px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 12px; font-family: inherit; font-size: 0.9rem; resize: vertical;
+  background: var(--panel); color: var(--ink); line-height: 1.5;
+}
+.obs-compose textarea:focus { outline: none; border-color: var(--primary); }
+
+.obs-list { display: flex; flex-direction: column; gap: 8px; }
+.obs-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.obs-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.obs-date-badge {
+  font-size: 0.76rem; font-weight: 700; color: var(--primary);
+  background: var(--accent-soft); border-radius: 6px; padding: 2px 8px;
+}
+.obs-del { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 0.9rem; }
+.obs-del:hover { color: var(--danger); }
+.obs-item-text {
+  width: 100%; border: 1px solid transparent; border-radius: 6px;
+  padding: 4px 6px; font-family: inherit; font-size: 0.88rem; resize: vertical;
+  background: transparent; color: var(--ink); line-height: 1.5;
+}
+.obs-item-text:hover { border-color: var(--line); }
+.obs-item-text:focus { outline: none; border-color: var(--primary); background: var(--panel); }
+
+[data-theme="dark"] .obs-toolbar select, [data-theme="dark"] .obs-compose input[type="date"],
+[data-theme="dark"] .obs-compose textarea { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .obs-item { border-color: #2a2e38; }
+[data-theme="dark"] .obs-date-badge { background: #262c3a; }
+[data-theme="dark"] .obs-item-text:focus { background: #1f2430; }
+
 /* ---------- 국어과 도구: 토론 타이머 / 초성 퀴즈 / 낱말 뽑기 / 글자 수 ---------- */
 .tool-textarea {
   width: 100%; border: 1px solid var(--line); border-radius: 8px;

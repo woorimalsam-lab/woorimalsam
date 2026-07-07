@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>내 교실 · 일정·메모</title>
+  <title>우리말샘 핀</title>
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏫</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📌</text></svg>" />
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">🏫 <span>내 교실</span></div>
+    <div class="brand">📌 <span>우리말샘 핀</span></div>
     <div class="account">
       <button id="theme-btn" class="btn btn-ghost btn-icon" title="다크 모드 전환">🌙</button>
       <span id="mode-badge" class="badge">로컬 저장 모드</span>
@@ -25,6 +25,7 @@
     <button class="navbtn" data-view="seating"><span class="navicon">🪑</span>자리배치</button>
     <button class="navbtn" data-view="students"><span class="navicon">👥</span>학생</button>
     <button class="navbtn" data-view="attendance"><span class="navicon">📋</span>출결</button>
+    <button class="navbtn" data-view="observe"><span class="navicon">👀</span>학생관찰</button>
     <button class="navbtn" data-view="calendar"><span class="navicon">📅</span>달력</button>
     <button class="navbtn" data-view="memo"><span class="navicon">📝</span>메모</button>
     <button class="navbtn" data-view="tools"><span class="navicon">🛠️</span>도구</button>
@@ -215,6 +216,30 @@
         <div class="att-actions">
           <button id="att-allpresent" class="btn btn-ghost btn-sm">이 날짜 전체 출석으로 초기화</button>
         </div>
+      </div>
+    </section>
+
+    <!-- ============ 학생관찰 기록 ============ -->
+    <section id="view-observe" class="view hidden">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>학생관찰 기록</h2>
+          <span id="obs-count" class="muted"></span>
+        </div>
+
+        <div class="obs-toolbar">
+          <select id="obs-grade" title="학년"></select>
+          <select id="obs-class" title="반"></select>
+          <select id="obs-student" title="학생"></select>
+        </div>
+
+        <div class="obs-compose">
+          <input id="obs-date" type="date" title="관찰 일자" />
+          <textarea id="obs-text" rows="2" placeholder="관찰 내용을 기록하세요 (수업 태도, 교우 관계, 특기 사항 등)"></textarea>
+          <button id="obs-add-btn" class="btn btn-primary btn-sm">기록</button>
+        </div>
+
+        <div id="obs-list" class="obs-list"></div>
       </div>
     </section>
 

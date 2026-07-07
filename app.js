@@ -1243,7 +1243,7 @@ function renderTodos() {
 // ============================================================
 function setView(name) {
   state.activeView = name;
-  const allViews = ["home", "timetable", "seating", "students", "attendance", "calendar", "memo", "tools", "settings"];
+  const allViews = ["home", "timetable", "seating", "students", "attendance", "observe", "calendar", "memo", "tools", "settings"];
   for (const v of allViews) {
     const el = $("view-" + v);
     if (el) el.classList.toggle("hidden", v !== name);
@@ -1256,6 +1256,7 @@ function setView(name) {
   if (name === "seating") renderSeating();
   if (name === "students") renderStudents();
   if (name === "attendance") renderAttendance();
+  if (name === "observe") renderObservations();
   if (name === "calendar") { renderCalendar(); if (state.selected) renderDayDetail(); }
   if (name === "memo") renderMemos();
   if (name === "tools") renderToolClassSelects();
@@ -2385,6 +2386,98 @@ async function exportAttendanceMonth() {
   toast("📥 이번 달 출결부를 엑셀로 저장했습니다 (상태·사유 포함)");
 }
 
+// ============================================================
+//  학생관찰 기록 — 학생별·일자별 누가 기록
+// ============================================================
+const LOCAL_OBS_KEY = "myplanner.observations";
+// 저장 구조: { 학생id: [ {id, date: "YYYY-MM-DD", text}, ... ] }
+let observations = {};
+
+function loadObservations() {
+  const o = loadLocal(LOCAL_OBS_KEY);
+  observations = (o && !Array.isArray(o)) ? o : {};
+}
+function saveObservations() {
+  saveLocal(LOCAL_OBS_KEY, observations);
+}
+
+// 학생 선택 드롭다운 채우기 (선택 유지, 기록 건수 표시)
+function fillObsStudentSelect() {
+  const sel = $("obs-student");
+  if (!sel) return;
+  const pool = toolStudents("obs-grade", "obs-class");
+  const prev = sel.value;
+  sel.innerHTML = pool.length
+    ? pool.map((s) => {
+        const n = (observations[s.id] || []).length;
+        return `<option value="${s.id}">${s.number ? s.number + "번 " : ""}${escapeHtml(s.name)}${n ? ` (${n})` : ""}</option>`;
+      }).join("")
+    : '<option value="">학생 없음</option>';
+  if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+}
+
+function renderObservations() {
+  const list = $("obs-list");
+  if (!list) return;
+  fillGradeClassSelects("obs-grade", "obs-class");
+  fillObsStudentSelect();
+  if (!$("obs-date").value) $("obs-date").value = todayStr();
+
+  const sid = $("obs-student")?.value;
+  if (!sid) {
+    $("obs-count").textContent = "";
+    list.innerHTML = '<p class="muted" style="text-align:center; padding: 20px;">\'학생\' 메뉴에서 명렬표를 먼저 올려 주세요.</p>';
+    return;
+  }
+
+  const recs = [...(observations[sid] || [])].sort((a, b) => b.date.localeCompare(a.date));
+  $("obs-count").textContent = recs.length ? `${recs.length}건` : "";
+  if (!recs.length) {
+    list.innerHTML = '<p class="muted" style="text-align:center; padding: 20px;">아직 기록이 없습니다. 위에 첫 관찰을 기록해 보세요.</p>';
+    return;
+  }
+
+  list.innerHTML = recs.map((r) => {
+    const [y, m, d] = r.date.split("-").map(Number);
+    const wd = "일월화수목금토"[new Date(y, m - 1, d).getDay()];
+    return `
+    <div class="obs-item" data-oid="${r.id}">
+      <div class="obs-item-head">
+        <span class="obs-date-badge">${m}/${d} (${wd})</span>
+        <span class="spacer"></span>
+        <button class="obs-del" data-oid="${r.id}" title="삭제">✕</button>
+      </div>
+      <textarea class="obs-item-text" data-oid="${r.id}" rows="2">${escapeHtml(r.text)}</textarea>
+    </div>`;
+  }).join("");
+}
+
+function addObservation() {
+  const sid = $("obs-student")?.value;
+  if (!sid) { toast("학생을 먼저 선택해 주세요"); return; }
+  const text = $("obs-text").value.trim();
+  if (!text) { toast("관찰 내용을 입력해 주세요"); return; }
+  const date = $("obs-date").value || todayStr();
+  (observations[sid] ||= []).push({ id: uid(), date, text });
+  saveObservations();
+  $("obs-text").value = "";
+  renderObservations();
+  toast("👀 관찰 기록을 저장했습니다");
+}
+function removeObservation(sid, oid) {
+  observations[sid] = (observations[sid] || []).filter((r) => r.id !== oid);
+  if (!observations[sid].length) delete observations[sid];
+  saveObservations();
+  renderObservations();
+}
+function updateObservation(sid, oid, text) {
+  const r = (observations[sid] || []).find((x) => x.id === oid);
+  if (!r) return;
+  if (!text.trim()) { removeObservation(sid, oid); return; }
+  r.text = text;
+  saveObservations();
+}
+
 // 모둠 편성: 명렬표에서 모둠장을 클릭해 고르면, 나머지는 랜덤 배분
 function renderGroupRoster() {
   const box = $("group-roster");
@@ -2923,6 +3016,30 @@ function bindEventsNew() {
   });
   $("att-export-btn")?.addEventListener("click", exportAttendanceMonth);
 
+  // 학생관찰 기록
+  $("obs-grade")?.addEventListener("change", () => {
+    fillGradeClassSelects("obs-grade", "obs-class");
+    renderObservations();
+  });
+  $("obs-class")?.addEventListener("change", renderObservations);
+  $("obs-student")?.addEventListener("change", renderObservations);
+  $("obs-add-btn")?.addEventListener("click", addObservation);
+  $("obs-text")?.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") addObservation();
+  });
+  // 기록 삭제/수정 (이벤트 위임)
+  $("obs-list")?.addEventListener("click", (e) => {
+    const del = e.target.closest(".obs-del");
+    if (!del) return;
+    const sid = $("obs-student")?.value;
+    if (sid && confirm("이 관찰 기록을 삭제할까요?")) removeObservation(sid, del.dataset.oid);
+  });
+  $("obs-list")?.addEventListener("change", (e) => {
+    if (!e.target.classList.contains("obs-item-text")) return;
+    const sid = $("obs-student")?.value;
+    if (sid) updateObservation(sid, e.target.dataset.oid, e.target.value);
+  });
+
   // 도구 - 발표자 뽑기 (학년 바꾸면 학급 목록도 갱신, 학급 바꾸면 기록 갱신)
   $("picker-btn")?.addEventListener("click", pickPresenter);
   $("picker-grade")?.addEventListener("change", () => {
@@ -2966,6 +3083,7 @@ async function start() {
   loadSettings();
   loadPickLog();
   loadAttendance();
+  loadObservations();
 
   // 현재 교시 하이라이트를 1분마다 갱신
   setInterval(() => {
