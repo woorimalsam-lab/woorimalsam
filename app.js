@@ -1540,6 +1540,9 @@ function loadSeating() {
   } else {
     state.seating = { rows: 5, cols: 6, currentClass: "all", grids: {} };
   }
+  // 새 옵션 기본값 (구버전 저장분 보완)
+  if (state.seating.pair !== 1 && state.seating.pair !== 2) state.seating.pair = 2;
+  if (state.seating.view !== "teacher" && state.seating.view !== "student") state.seating.view = "teacher";
 }
 function saveSeating() {
   saveLocal(LOCAL_SEATING_KEY, state.seating);
@@ -1585,24 +1588,64 @@ function renderSeating() {
   }
   const count = $("seating-count");
   if (count) count.textContent = `${seatingStudents().length}명`;
+  const pairSel = $("seating-pair"), viewSel = $("seating-view");
+  if (pairSel) pairSel.value = String(state.seating.pair);
+  if (viewSel) viewSel.value = state.seating.view;
 
-  const { rows, cols } = state.seating;
+  const { rows, cols, pair, view } = state.seating;
   const grid = currentGrid();
-  let html = '<div class="seating-board">칠판</div>';
-  html += `<div class="seating-grid" style="grid-template-columns: repeat(${cols}, 1fr)">`;
+
+  // 교탁에서 본 배치 = 좌우 반전 (앞줄은 두 방향 모두 칠판 바로 아래)
+  const colOrder = [];
+  for (let c = 0; c < cols; c++) colOrder.push(view === "teacher" ? cols - 1 - c : c);
+
+  // 줄 묶음: pair개 열마다 통로(간격) 삽입
+  const template = [];
+  colOrder.forEach((_, i) => {
+    template.push("1fr");
+    if ((i + 1) % pair === 0 && i !== cols - 1) template.push("18px");
+  });
+
+  const g = state.seating.currentGrade, c2 = state.seating.currentClass;
+  const viewLabel = view === "teacher" ? "교탁에서 본 배치" : "학생석에서 본 배치";
+  let html = `<div class="seating-print-title">${g ? g + "학년 " : ""}${c2 ? c2 + "반 " : ""}좌석표 · ${viewLabel} · ${todayStr()}</div>`;
+  html += `<div class="seating-board">${view === "teacher" ? "교탁 (칠판)" : "칠판 · 교탁"}</div>`;
+  html += `<div class="seating-grid" style="grid-template-columns: ${template.join(" ")}">`;
   for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
+    colOrder.forEach((c, i) => {
       const seat = grid[r]?.[c];
       const sel = seatPicked && seatPicked.r === r && seatPicked.c === c;
       const label = seat
         ? `${seat.num ? `<b class="seat-num">${escapeHtml(seat.num)}</b>` : ""}${escapeHtml(seat.name)}`
         : "－";
       html += `<div class="seating-seat${seat ? "" : " empty"}${sel ? " selected" : ""}" data-row="${r}" data-col="${c}">${label}</div>`;
-    }
+      if ((i + 1) % pair === 0 && i !== cols - 1) html += '<div class="seat-spacer"></div>';
+    });
   }
   html += "</div>";
-  html += '<p class="seating-hint muted">좌석을 하나 누른 뒤 다른 좌석을 누르면 서로 자리가 바뀝니다.</p>';
+  html += '<p class="seating-hint muted">좌석을 하나 누른 뒤 다른 좌석을 누르면 서로 자리가 바뀝니다. 인쇄는 현재 화면의 방향·묶음 그대로 나갑니다.</p>';
   display.innerHTML = html;
+}
+
+// 좌석표 인쇄 (가로 A4, 좌석표만)
+function printSeating() {
+  if (!seatingStudents().length && !Object.keys(state.seating.grids).length) {
+    toast("먼저 자리배치를 만들어 주세요");
+    return;
+  }
+  const style = document.createElement("style");
+  style.id = "print-orient-style";
+  style.textContent = "@page { size: A4 landscape; margin: 12mm; }";
+  document.head.appendChild(style);
+  document.body.classList.add("print-seating");
+  const cleanup = () => {
+    document.body.classList.remove("print-seating");
+    $("print-orient-style")?.remove();
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  window.print();
+  setTimeout(cleanup, 3000);   // afterprint 미지원 브라우저 대비
 }
 // 좌석 두 개를 차례로 눌러 맞바꾸기 (현재 반의 배치에서)
 function onSeatClick(r, c) {
@@ -2621,6 +2664,17 @@ function bindEventsNew() {
     saveSeating();
     renderSeating();
   });
+  $("seating-pair")?.addEventListener("change", (e) => {
+    state.seating.pair = Number(e.target.value) === 2 ? 2 : 1;
+    saveSeating();
+    renderSeating();
+  });
+  $("seating-view")?.addEventListener("change", (e) => {
+    state.seating.view = e.target.value === "student" ? "student" : "teacher";
+    saveSeating();
+    renderSeating();
+  });
+  $("print-seating-btn")?.addEventListener("click", printSeating);
   $("edit-seating-btn")?.addEventListener("click", () => {
     $("seating-rows").value = state.seating.rows;
     $("seating-cols").value = state.seating.cols;

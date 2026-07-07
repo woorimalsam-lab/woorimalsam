@@ -112,16 +112,29 @@
       <div class="panel">
         <div class="panel-head">
           <h2>자리배치</h2>
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <button id="random-seating-btn" class="btn btn-ghost btn-sm">🔀 랜덤 배치</button>
-            <button id="edit-seating-btn" class="btn btn-primary btn-sm">행·열 설정</button>
+            <button id="edit-seating-btn" class="btn btn-ghost btn-sm">행·열 설정</button>
+            <button id="print-seating-btn" class="btn btn-primary btn-sm">🖨️ 인쇄</button>
           </div>
         </div>
 
         <div class="seating-toolbar">
-          <label>학급 선택:
+          <label>학급:
             <select id="seating-grade" title="학년"></select>
             <select id="seating-class" title="반"></select>
+          </label>
+          <label>줄 묶음:
+            <select id="seating-pair" title="줄 묶음">
+              <option value="1">한 줄씩</option>
+              <option value="2">두 줄씩 (짝꿍)</option>
+            </select>
+          </label>
+          <label>방향:
+            <select id="seating-view" title="보는 방향">
+              <option value="teacher">교탁에서 본 배치</option>
+              <option value="student">학생석에서 본 배치</option>
+            </select>
           </label>
           <span id="seating-count" class="muted"></span>
         </div>

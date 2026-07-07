@@ -837,6 +837,42 @@ body {
 .seating-seat { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 4px; }
 .seating-seat.empty { color: var(--muted); border-style: dashed; }
 .seating-hint { margin: 10px 0 0; }
+.seat-spacer { pointer-events: none; }
+.seating-print-title { display: none; }
+
+/* ---------- 좌석표 인쇄 ---------- */
+@media print {
+  body.print-seating .topbar,
+  body.print-seating .tabbar,
+  body.print-seating .toast { display: none !important; }
+  body.print-seating .main { max-width: none; padding: 0; }
+  body.print-seating .view { display: none !important; }
+  body.print-seating #view-seating { display: block !important; }
+  body.print-seating #view-seating .panel { box-shadow: none; border: none; padding: 0; background: #fff; }
+  body.print-seating #view-seating .panel-head,
+  body.print-seating #view-seating .seating-toolbar,
+  body.print-seating #view-seating .seating-config,
+  body.print-seating #view-seating .seating-hint { display: none !important; }
+  body.print-seating .seating-print-title {
+    display: block; text-align: center;
+    font-size: 17pt; font-weight: 800; color: #000; margin: 0 0 6mm;
+  }
+  body.print-seating .seating-board {
+    background: #333 !important; color: #fff !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  body.print-seating .seating-seat {
+    border: 1.2pt solid #444 !important; border-radius: 6px;
+    color: #000 !important; background: #fff !important;
+    min-height: 16mm; font-size: 11.5pt;
+  }
+  body.print-seating .seating-seat.empty { border-style: dashed !important; color: #999 !important; }
+  body.print-seating .seating-seat .seat-num { color: #000 !important; font-weight: 800; }
+  body.print-seating .seating-seat.selected {
+    background: #fff !important; color: #000 !important;
+    border-color: #444 !important; box-shadow: none !important;
+  }
+}
 .seating-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .seating-toolbar label { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.9rem; }
 .seating-toolbar select { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); }
