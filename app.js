@@ -1612,8 +1612,7 @@ function renderSeating() {
   });
 
   const g = state.seating.currentGrade, c2 = state.seating.currentClass;
-  const viewLabel = teacher ? "교탁에서 본 배치" : "학생석에서 본 배치";
-  let html = `<div class="seating-print-title">${g ? g + "학년 " : ""}${c2 ? c2 + "반 " : ""}좌석표 · ${viewLabel} · ${todayStr()}</div>`;
+  let html = `<div class="seating-print-title">${g ? g + "학년 " : ""}${c2 ? c2 + "반 " : ""}좌석표</div>`;
   if (!teacher) html += '<div class="seating-board">칠판 · 교탁</div>';
   html += `<div class="seating-grid" style="grid-template-columns: ${template.join(" ")}">`;
   for (const r of rowOrder) {
