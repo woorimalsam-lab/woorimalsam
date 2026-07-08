@@ -2303,7 +2303,7 @@ function saveAttendance() {
 
 // ---- 학급 게시판 공유 ----------------------------------------
 // 켜두면 출결 저장 시 Firestore(classboard/attendance)에 자동 발행되어
-// 학급 게시판(https://woorimalsam-lab.github.io/classboard/)에 표시됩니다.
+// 학급 게시판(https://woorimalsam-lab.github.io/classroom/)에 표시됩니다.
 // 학생 개인정보 보호를 위해 비고(n)는 공유하지 않습니다.
 const LOCAL_ATT_SHARE_KEY = "myplanner.attShare";
 let attShare = false;
