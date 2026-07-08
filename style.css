@@ -434,6 +434,19 @@ body {
   outline: none; border-color: var(--primary);
 }
 
+/* 메모 항목 필터 칩 */
+.memo-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.memo-chip {
+  border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+  border-radius: 999px; padding: 6px 13px; cursor: pointer;
+  font-family: inherit; font-size: 0.83rem; font-weight: 600;
+  transition: all 0.12s ease;
+}
+.memo-chip:hover { border-color: var(--primary); color: var(--ink); }
+.memo-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+[data-theme="dark"] .memo-chip { background: #1f2430; border-color: #2a2e38; color: #b3b9c6; }
+[data-theme="dark"] .memo-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
 /* 그룹(라벨) 헤더 */
 .memo-list { display: flex; flex-direction: column; gap: 6px; }
 .memo-group { margin-bottom: 16px; }
@@ -647,10 +660,11 @@ body {
    시간표, 자리배치, 학생, 도구, 설정
 ============================================================ */
 
-/* 시간표 + 수업진도표 2단 레이아웃 */
-.tt-layout { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; align-items: start; }
-.tt-panel, .progress-panel { min-width: 0; }
-@media (max-width: 900px) { .tt-layout { grid-template-columns: 1fr; } }
+/* 시간표(컴시간 뷰어 임베드) + 수업진도표 세로 배치 */
+.tt-embed-panel { margin-bottom: 16px; }
+.tt-frame-wrap { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.tt-frame { width: 100%; height: 760px; border: 0; display: block; background: #fff; }
+@media (max-width: 640px) { .tt-frame { height: 620px; } }
 
 /* 수업진도표 (날짜 × 학급 매트릭스) */
 .progress-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }

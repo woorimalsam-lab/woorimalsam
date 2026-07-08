@@ -84,49 +84,36 @@
       </div>
     </section>
 
-    <!-- ============ 시간표 + 수업진도표 ============ -->
+    <!-- ============ 시간표(컴시간 연동) + 수업진도표 ============ -->
     <section id="view-timetable" class="view hidden">
-      <div class="tt-layout">
-        <!-- 왼쪽: 시간표 -->
-        <div class="panel tt-panel">
-          <div class="panel-head">
-            <h2>시간표</h2>
-            <button id="edit-timetable-btn" class="btn btn-primary btn-sm">편집</button>
-          </div>
+      <!-- 시간표 뷰어 (컴시간 자동 연동) -->
+      <div class="panel tt-embed-panel">
+        <div class="panel-head">
+          <h2>시간표 <span class="muted" style="font-weight:400; font-size:0.8rem;">컴시간 자동 연동</span></h2>
+          <a href="https://woorimalsam-lab.github.io/timetable/" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">새 탭에서 열기 ↗</a>
+        </div>
+        <div class="tt-frame-wrap">
+          <iframe id="tt-frame" class="tt-frame" title="교사 시간표 뷰어" loading="lazy"></iframe>
+        </div>
+      </div>
 
-          <div id="timetable-display" class="timetable-display"></div>
-
-          <div id="timetable-editor" class="timetable-editor hidden">
-            <div class="tt-controls">
-              <label>교시 수: <input id="tt-periods" type="number" value="7" min="1" max="10" /></label>
-              <span class="spacer"></span>
-              <button id="save-timetable-btn" class="btn btn-primary">저장</button>
-              <button id="cancel-timetable-btn" class="btn btn-ghost">취소</button>
-            </div>
-            <div class="timetable-editor-wrapper">
-              <table class="timetable-grid" id="timetable-grid"></table>
-            </div>
-          </div>
+      <!-- 학급별 수업진도표 -->
+      <div class="panel progress-panel">
+        <div class="panel-head">
+          <h2>수업진도표</h2>
+          <button id="progress-export-btn" class="btn btn-ghost btn-sm">📥 엑셀</button>
         </div>
 
-        <!-- 오른쪽: 학급별 수업진도표 -->
-        <div class="panel progress-panel">
-          <div class="panel-head">
-            <h2>수업진도표</h2>
-            <button id="progress-export-btn" class="btn btn-ghost btn-sm">📥 엑셀</button>
-          </div>
-
-          <div class="progress-toolbar">
-            <label>수업일 추가:
-              <input id="progress-date" type="date" title="수업 일자" />
-            </label>
-            <button id="progress-adddate-btn" class="btn btn-primary btn-sm">＋ 날짜 추가</button>
-            <span id="progress-count" class="muted"></span>
-          </div>
-          <p class="progress-hint muted">날짜를 추가한 뒤, 각 학급 칸에 진도(단원·차시)를 적으면 자동 저장됩니다.</p>
-
-          <div id="progress-list" class="progress-matrix-wrap"></div>
+        <div class="progress-toolbar">
+          <label>수업일 추가:
+            <input id="progress-date" type="date" title="수업 일자" />
+          </label>
+          <button id="progress-adddate-btn" class="btn btn-primary btn-sm">＋ 날짜 추가</button>
+          <span id="progress-count" class="muted"></span>
         </div>
+        <p class="progress-hint muted">학급 열은 내 시간표(컴시간)에서 자동으로 가져옵니다. 날짜를 추가한 뒤 각 학급 칸에 진도를 적으면 자동 저장됩니다.</p>
+
+        <div id="progress-list" class="progress-matrix-wrap"></div>
       </div>
     </section>
 
@@ -329,6 +316,7 @@
           </div>
         </div>
 
+        <div id="memo-filter" class="memo-filter"></div>
         <div id="memo-list" class="memo-list"></div>
       </div>
     </section>

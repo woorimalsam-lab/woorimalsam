@@ -29,6 +29,7 @@ const state = {
   editingEventId: null,    // 모달에서 수정 중인 일정 id
   filters: { personal: true, work: true, subject: true, academic: true }, // 레이어 표시 여부
   memoCats: [],            // 메모 항목(카테고리) 목록
+  memoFilter: "all",       // 메모 항목 필터 ("all" 또는 항목명)
   memoSearch: "",          // 메모 검색어
   paletteFor: null,        // 색상 팔레트가 열린 메모 id
   todos: [],               // 할 일 목록
@@ -662,10 +663,31 @@ function renderDashMemos() {
     </div>`).join("");
 }
 
+// 메모가 특정 항목에 속하는지 (미분류 포함)
+function memoInCat(m, cat) {
+  return cat === UNCAT
+    ? (!m.category || !state.memoCats.includes(m.category))
+    : m.category === cat;
+}
+// 항목 필터 칩 (전체 · 수업 · 업무 · 개인 · … · 미분류)
+function renderMemoFilter() {
+  const bar = $("memo-filter");
+  if (!bar) return;
+  const hasUncat = state.memos.some((m) => memoInCat(m, UNCAT));
+  const chips = [{ key: "all", label: "전체" }, ...state.memoCats.map((c) => ({ key: c, label: c }))];
+  if (hasUncat) chips.push({ key: UNCAT, label: UNCAT });
+  if (state.memoFilter !== "all" && !chips.some((c) => c.key === state.memoFilter)) state.memoFilter = "all";
+  const countOf = (key) => key === "all" ? state.memos.length : state.memos.filter((m) => memoInCat(m, key)).length;
+  bar.innerHTML = chips.map((c) =>
+    `<button class="memo-chip${state.memoFilter === c.key ? " active" : ""}" data-cat="${escapeHtml(c.key)}">${escapeHtml(c.label)} ${countOf(c.key)}</button>`
+  ).join("");
+}
+
 function renderMemos() {
   renderDashMemos();
   rebuildMemoCats();
   renderMemoCatSelect();
+  renderMemoFilter();
 
   const list = $("memo-list");
   list.innerHTML = "";
@@ -688,6 +710,17 @@ function renderMemos() {
       return;
     }
     list.appendChild(makeMemoGroup("🔍 검색 결과", found));
+    return;
+  }
+
+  // 특정 항목 필터 선택 시: 그 항목만 평면 목록(고정 먼저)
+  if (state.memoFilter !== "all") {
+    const items = state.memos.filter((m) => memoInCat(m, state.memoFilter)).sort(byPinnedThenDate);
+    if (!items.length) {
+      list.appendChild(emptyNote(`'${state.memoFilter}' 항목의 메모가 없습니다.`));
+      return;
+    }
+    list.appendChild(makeMemoGroup(state.memoFilter, items));
     return;
   }
 
@@ -1300,7 +1333,12 @@ function setView(name) {
 
   // 각 뷰별 초기화
   if (name === "home") renderDashboard();
-  if (name === "timetable") { renderTimetable(); renderProgress(); }
+  if (name === "timetable") {
+    const fr = $("tt-frame");
+    if (fr && !fr.src) fr.src = COMCI_BASE + "/";   // 최초 진입 시에만 로드
+    loadComci();
+    renderProgress();
+  }
   if (name === "seating") renderSeating();
   if (name === "students") renderStudents();
   if (name === "attendance") renderAttendance();
@@ -1417,6 +1455,14 @@ function bindEvents() {
     renderMemos();
     $("memo-search").focus();
   });
+
+  // 메모 항목 필터 칩 (전체/수업/업무/개인/…)
+  $("memo-filter").addEventListener("click", (e) => {
+    const chip = e.target.closest(".memo-chip");
+    if (!chip) return;
+    state.memoFilter = chip.dataset.cat;
+    renderMemos();
+  });
 }
 
 // ============================================================
@@ -1470,6 +1516,63 @@ function todayDayKey() {
   return idx >= 0 && idx < 5 ? TT_DAY_KEYS[idx] : null;
 }
 
+// ============================================================
+//  컴시간 시간표 데이터 (외부 뷰어와 동일 소스, CORS로 직접 fetch)
+// ============================================================
+const COMCI_BASE = "https://woorimalsam-lab.github.io/timetable";
+const comci = { loaded: false, loading: false, teachers: [], perTeacher: {}, times: [], label: "", school: "" };
+
+async function loadComci(force) {
+  if (comci.loading || (comci.loaded && !force)) return comci.loaded;
+  comci.loading = true;
+  try {
+    const idx = await (await fetch(`${COMCI_BASE}/data/index.json?t=${Date.now()}`)).json();
+    const code = idx.school.code;
+    const week = idx.current || (idx.weeks && idx.weeks[0] && idx.weeks[0].start);
+    const data = await (await fetch(`${COMCI_BASE}/data/${code}_${week}.json?t=${Date.now()}`)).json();
+    comci.teachers = data.teachers || [];
+    comci.perTeacher = data.per_teacher || {};
+    comci.times = data.period_times || [];
+    comci.label = data.week_label || "";
+    comci.school = idx.school.name || "";
+    comci.loaded = true;
+  } catch (e) {
+    console.error("컴시간 데이터 로드 실패", e);
+    comci.loaded = false;
+  } finally {
+    comci.loading = false;
+  }
+  // 로드 후 관련 화면 갱신
+  if (state.activeView === "home") renderTodayTimetable();
+  if (state.activeView === "timetable") renderProgress();
+  return comci.loaded;
+}
+
+// 설정의 '내 이름'으로 담당 교사 찾기 (마스킹된 이름 대응: 김수* ← 김수연)
+function myTeacherName() {
+  return (state.settings?.teacher || "김수").replace(/\*/g, "").trim();
+}
+function myTeacher() {
+  const key = myTeacherName();
+  if (!key) return null;
+  return comci.teachers.find((t) => {
+    const n = (t.name || "").replace(/\*/g, "");
+    return n && (key.startsWith(n) || n.startsWith(key));
+  }) || null;
+}
+function myOcc() {
+  const t = myTeacher();
+  return t ? (comci.perTeacher[t.idx] || []) : [];
+}
+function comciPeriodIndex() {
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  return comci.times.findIndex((t) => {
+    const start = timeToMin(t);
+    return start !== null && nowMin >= start && nowMin < start + PERIOD_MINUTES;
+  });
+}
+
 function renderTimetable() {
   const display = $("timetable-display");
   if (!display) return;
@@ -1498,30 +1601,40 @@ function renderTimetable() {
   renderTodayTimetable();
 }
 
-// 대시보드 카드: 오늘 수업만 추려서 표시 + 현재 교시 강조
+// 대시보드 카드: 컴시간 데이터에서 내 오늘 수업만 추려 표시 + 현재 교시 강조
 function renderTodayTimetable() {
   const box = $("today-timetable");
   if (!box) return;
-  const todayKey = todayDayKey();
-  if (!todayKey) {
+  const dayIdx = new Date().getDay() - 1;   // 월=0 … 금=4
+  if (dayIdx < 0 || dayIdx > 4) {
     box.innerHTML = '<div class="today-timetable-empty">주말입니다 🎉</div>';
     return;
   }
-  const nowP = currentPeriodIndex();
-  const items = [];
-  state.timetable.times.forEach((time, p) => {
-    const subj = state.timetable.cells[todayKey]?.[p];
-    if (!subj) return;
-    const isNow = p === nowP;
-    items.push(
-      `<div class="today-timetable-item${isNow ? " now" : ""}">` +
-      `<b>${p + 1}교시</b> <span class="tt-time">${time}</span> ${subj}` +
-      `${isNow ? '<span class="tt-now-badge">지금</span>' : ""}</div>`
-    );
-  });
-  box.innerHTML = items.length
-    ? items.join("")
-    : '<div class="today-timetable-empty">오늘은 수업이 없습니다</div>';
+  if (!comci.loaded) {
+    box.innerHTML = comci.loading
+      ? '<div class="today-timetable-empty">시간표 불러오는 중…</div>'
+      : '<div class="today-timetable-empty">시간표를 불러오지 못했습니다</div>';
+    if (!comci.loading) loadComci();
+    return;
+  }
+  const t = myTeacher();
+  if (!t) {
+    box.innerHTML = '<div class="today-timetable-empty">설정에서 \'내 이름\'을 등록하면 오늘 수업이 표시됩니다</div>';
+    return;
+  }
+  const nowP = comciPeriodIndex();
+  const todays = myOcc().filter((e) => e.day === dayIdx).sort((a, b) => a.period - b.period);
+  if (!todays.length) {
+    box.innerHTML = '<div class="today-timetable-empty">오늘은 수업이 없습니다</div>';
+    return;
+  }
+  box.innerHTML = todays.map((e) => {
+    const isNow = e.period === nowP;
+    const time = comci.times[e.period] || "";
+    return `<div class="today-timetable-item${isNow ? " now" : ""}">` +
+      `<b>${e.period + 1}교시</b> <span class="tt-time">${time}</span> ${escapeHtml(e.cls)} ${escapeHtml(e.sub)}` +
+      `${isNow ? '<span class="tt-now-badge">지금</span>' : ""}</div>`;
+  }).join("");
 }
 
 function renderTimetableEditor() {
@@ -1582,17 +1695,11 @@ function loadProgress() {
 function saveProgress() {
   saveLocal(LOCAL_PROGRESS_KEY, progress);
 }
-// 시간표 셀의 서로 다른 학급 라벨 (예: "206 화언", "207 화언" …)
+// 진도표 학급 열: 내 시간표(컴시간)에서 담당 학급 + 이미 기록이 있는 학급
 function timetableClasses() {
   const set = new Set();
-  for (const k of TT_DAY_KEYS) {
-    for (const cell of state.timetable.cells[k] || []) {
-      const v = (cell || "").trim();
-      if (v) set.add(v);
-    }
-  }
-  // 기록만 있고 시간표엔 없는 학급도 목록에 포함 (편집으로 지워도 기록 유지)
-  for (const label of Object.keys(progress)) if (!set.has(label)) set.add(label);
+  for (const e of myOcc()) if (e.cls) set.add(e.cls);   // 컴시간에서 내가 가르치는 반
+  for (const label of Object.keys(progress)) set.add(label);   // 기존 기록 학급 유지
   return [...set].sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
 }
 
@@ -3392,11 +3499,11 @@ async function start() {
   loadAttShare();
   loadObservations();
   loadProgress();
+  loadComci();   // 컴시간 시간표 데이터 백그라운드 로드 (대시보드 오늘 수업·진도표 학급)
 
   // 현재 교시 하이라이트를 1분마다 갱신
   setInterval(() => {
     if (state.activeView === "home") renderTodayTimetable();
-    if (state.activeView === "timetable") renderTimetable();
   }, 60000);
 
   if (isConfigured) {
@@ -3417,7 +3524,6 @@ async function start() {
     await refreshEvents();
   }
   renderDayDetail();
-  renderTimetable();
   renderSeating();
   renderStudents();
   setView("home");   // 기본 화면: 대시보드
