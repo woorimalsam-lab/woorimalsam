@@ -835,8 +835,17 @@ body {
   display: flex; flex-direction: column; margin-bottom: 10px;
   gap: 6px; font-size: 0.9rem;
 }
-.settings-section input { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.settings-section input, .settings-section select { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); }
 .settings-section p { margin: 4px 0; font-size: 0.9rem; color: var(--muted); }
+.setting-hint { font-size: 0.78rem; color: var(--muted); font-weight: 400; }
+.setting-row-inline { flex-direction: row !important; align-items: center; flex-wrap: wrap; gap: 10px !important; }
+.setting-row-inline select { min-width: 120px; }
+.setting-btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.agg-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.agg-chip { font-size: 0.8rem; background: var(--accent-soft); border-radius: 999px; padding: 4px 12px; color: var(--muted); }
+.agg-chip b { color: var(--primary); }
+[data-theme="dark"] .settings-section select { background: #1f2430; border-color: #2a2e38; }
+[data-theme="dark"] .agg-chip { background: #262c3a; }
 
 /* 다크모드 새로운 섹션 */
 [data-theme="dark"] .timetable-student-select select { background: #1f2430; color: var(--ink); border-color: #2a2e38; }

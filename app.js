@@ -1343,6 +1343,11 @@ function setView(name) {
   if (name === "students") renderStudents();
   if (name === "attendance") renderAttendance();
   if (name === "observe") renderObservations();
+  if (name === "settings") {
+    loadSettings();
+    fillAggYear();
+    renderAggSummary($("agg-year")?.value);
+  }
   if (name === "calendar") { renderCalendar(); if (state.selected) renderDayDetail(); }
   if (name === "memo") renderMemos();
   if (name === "tools") renderToolClassSelects();
@@ -2228,20 +2233,152 @@ function ensureXLSX() {
 function loadSettings() {
   const s = loadLocal(LOCAL_SETTINGS_KEY);
   // loadLocal은 빈 값일 때 []를 반환 → 객체 형태 검증 필수
-  state.settings = (s && !Array.isArray(s)) ? s : { school: "", grade: "", teacher: "" };
+  state.settings = (s && !Array.isArray(s)) ? s : { school: "", grade: "", teacher: "", home: "home" };
   $("setting-school").value = state.settings.school || "";
   $("setting-grade").value = state.settings.grade || "";
   $("setting-teacher").value = state.settings.teacher || "";
+  if ($("setting-home")) $("setting-home").value = state.settings.home || "home";
+  if ($("setting-theme")) $("setting-theme").value = document.documentElement.getAttribute("data-theme") || "light";
 }
 function saveSettings() {
   state.settings = {
+    ...state.settings,
     school: $("setting-school").value,
     grade: $("setting-grade").value,
-    teacher: $("setting-teacher").value
+    teacher: $("setting-teacher").value,
+    home: $("setting-home") ? $("setting-home").value : "home",
   };
   saveLocal(LOCAL_SETTINGS_KEY, state.settings);
-  renderDashboard();   // 인사말에 즉시 반영
+  renderDashboard();     // 인사말에 즉시 반영
+  loadComci(true);       // 교사명 변경 시 내 수업 다시 매칭
   toast("설정이 저장되었습니다.");
+}
+
+// ============================================================
+//  연도별 데이터 취합 (엑셀 여러 시트)
+// ============================================================
+function studentLabel(sid) {
+  const s = state.students.find((x) => x.id === sid);
+  if (!s) return "(삭제된 학생)";
+  return `${s.class ? s.class + "-" : ""}${s.number ? s.number + "번 " : ""}${s.name}`;
+}
+// 데이터에 존재하는 모든 연도 (+올해)
+function dataYears() {
+  const set = new Set();
+  const addFromDate = (d) => { if (d && d.length >= 4) set.add(d.slice(0, 4)); };
+  loadLocal(LOCAL_EVENTS_KEY).forEach((e) => addFromDate(e.date));
+  Object.keys(attendance || {}).forEach(addFromDate);
+  Object.values(observations || {}).forEach((arr) => arr.forEach((o) => addFromDate(o.date)));
+  Object.values(progress || {}).forEach((arr) => arr.forEach((p) => addFromDate(p.date)));
+  const yearOf = (ms) => { const d = new Date(ms || 0); return isNaN(d) ? null : String(d.getFullYear()); };
+  loadLocal(LOCAL_MEMOS_KEY).forEach((m) => { const y = yearOf(m.createdAt); if (y) set.add(y); });
+  loadLocal(LOCAL_TODOS_KEY).forEach((t) => { const y = yearOf(t.createdAt); if (y) set.add(y); });
+  set.add(String(new Date().getFullYear()));
+  return [...set].sort((a, b) => b.localeCompare(a));
+}
+function fillAggYear() {
+  const sel = $("agg-year");
+  if (!sel) return;
+  const years = dataYears();
+  const prev = sel.value;
+  sel.innerHTML = years.map((y) => `<option value="${y}">${y}년</option>`).join("");
+  if (years.includes(prev)) sel.value = prev;
+}
+async function exportYearAggregate() {
+  const year = $("agg-year")?.value;
+  if (!year) { toast("연도를 선택해 주세요"); return; }
+  try { await ensureXLSX(); } catch (e) { toast(e.message); return; }
+
+  const CAT = { personal: "개인", work: "업무", subject: "교과", academic: "학사" };
+  const wb = XLSX.utils.book_new();
+  const addSheet = (name, rows) => {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, name);
+    return rows.length - 1;
+  };
+  const inYear = (d) => (d || "").startsWith(year + "-");
+  const counts = {};
+
+  // 일정
+  const evRows = [["날짜", "분류", "제목", "시간", "메모"]];
+  loadLocal(LOCAL_EVENTS_KEY).filter((e) => inYear(e.date))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .forEach((e) => evRows.push([e.date, CAT[e.category] || e.category || "", e.title || "", e.allDay ? "종일" : (e.start || ""), e.desc || ""]));
+  counts["일정"] = addSheet("일정", evRows);
+
+  // 출결
+  const atRows = [["날짜", "학급", "번호", "이름", "상태", "비고"]];
+  Object.keys(attendance || {}).filter((d) => d.startsWith(year + "-")).sort()
+    .forEach((d) => {
+      const byCls = attendance[d];
+      Object.keys(byCls).forEach((clsKey) => {
+        const recs = byCls[clsKey];
+        Object.keys(recs).forEach((sid) => {
+          const r = recs[sid];
+          const s = state.students.find((x) => x.id === sid);
+          atRows.push([d, s ? (s.class || "") : clsKey, s ? (s.number || "") : "", s ? s.name : "(삭제)", (r.t || "") + r.s, r.n || ""]);
+        });
+      });
+    });
+  counts["출결"] = addSheet("출결", atRows);
+
+  // 학생관찰
+  const obRows = [["학생", "날짜", "관찰 내용"]];
+  Object.keys(observations || {}).forEach((sid) => {
+    observations[sid].filter((o) => inYear(o.date)).sort((a, b) => a.date.localeCompare(b.date))
+      .forEach((o) => obRows.push([studentLabel(sid), o.date, o.text || ""]));
+  });
+  counts["학생관찰"] = addSheet("학생관찰", obRows);
+
+  // 수업진도
+  const prRows = [["학급", "날짜", "진도 내용"]];
+  Object.keys(progress || {}).sort().forEach((cls) => {
+    progress[cls].filter((p) => inYear(p.date)).sort((a, b) => a.date.localeCompare(b.date))
+      .forEach((p) => prRows.push([cls, p.date, p.content || ""]));
+  });
+  counts["수업진도"] = addSheet("수업진도", prRows);
+
+  // 메모
+  const moRows = [["작성일", "항목", "내용"]];
+  loadLocal(LOCAL_MEMOS_KEY).filter((m) => { const d = new Date(m.createdAt || 0); return !isNaN(d) && String(d.getFullYear()) === year; })
+    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+    .forEach((m) => { const d = new Date(m.createdAt || 0); moRows.push([`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, m.category || "", m.text || ""]); });
+  counts["메모"] = addSheet("메모", moRows);
+
+  // 할 일
+  const tdRows = [["작성일", "완료", "내용"]];
+  loadLocal(LOCAL_TODOS_KEY).filter((t) => { const d = new Date(t.createdAt || 0); return !isNaN(d) && String(d.getFullYear()) === year; })
+    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+    .forEach((t) => { const d = new Date(t.createdAt || 0); tdRows.push([`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, t.done ? "완료" : "", t.text || ""]); });
+  counts["할일"] = addSheet("할 일", tdRows);
+
+  // 요약 시트 (맨 앞)
+  const sumRows = [[`${year}년 데이터 취합`, ""], ["항목", "건수"]];
+  Object.keys(counts).forEach((k) => sumRows.push([k, counts[k]]));
+  const sumWs = XLSX.utils.aoa_to_sheet(sumRows);
+  XLSX.utils.book_append_sheet(wb, sumWs, "요약");
+  wb.SheetNames.unshift(wb.SheetNames.pop());   // 요약을 맨 앞으로
+
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  if (!total) { toast(`${year}년에 취합할 데이터가 없습니다`); return; }
+  XLSX.writeFile(wb, `${(state.settings.school || "우리말샘핀")}_${year}년_전체데이터.xlsx`);
+  renderAggSummary(year, counts);
+  toast(`📊 ${year}년 데이터 ${total}건을 엑셀로 취합했습니다`);
+}
+function renderAggSummary(year, counts) {
+  const box = $("agg-summary");
+  if (!box) return;
+  if (!counts) {
+    const inYear = (d) => (d || "").startsWith(year + "-");
+    counts = {
+      "일정": loadLocal(LOCAL_EVENTS_KEY).filter((e) => inYear(e.date)).length,
+      "출결": Object.keys(attendance || {}).filter((d) => d.startsWith(year + "-"))
+        .reduce((n, d) => n + Object.values(attendance[d]).reduce((m, c) => m + Object.keys(c).length, 0), 0),
+      "학생관찰": Object.values(observations || {}).reduce((n, arr) => n + arr.filter((o) => inYear(o.date)).length, 0),
+      "수업진도": Object.values(progress || {}).reduce((n, arr) => n + arr.filter((p) => inYear(p.date)).length, 0),
+    };
+  }
+  box.innerHTML = Object.keys(counts).map((k) => `<span class="agg-chip">${k} <b>${counts[k]}</b></span>`).join("");
 }
 function exportData() {
   const data = {
@@ -3312,6 +3449,15 @@ function bindEventsNew() {
 
   // 설정
   $("save-settings-btn")?.addEventListener("click", saveSettings);
+  // 테마 즉시 전환 + 저장
+  $("setting-theme")?.addEventListener("change", (e) => {
+    const t = e.target.value === "dark" ? "dark" : "light";
+    localStorage.setItem(THEME_KEY, t);
+    applyTheme(t);
+  });
+  // 연도별 취합
+  $("agg-year")?.addEventListener("change", (e) => renderAggSummary(e.target.value));
+  $("agg-export-btn")?.addEventListener("click", exportYearAggregate);
   $("export-data-btn")?.addEventListener("click", exportData);
   $("import-data-btn")?.addEventListener("click", importData);
   $("import-file")?.addEventListener("change", (e) => {
@@ -3526,7 +3672,8 @@ async function start() {
   renderDayDetail();
   renderSeating();
   renderStudents();
-  setView("home");   // 기본 화면: 대시보드
+  const startView = state.settings?.home || "home";   // 설정의 첫 화면
+  setView(["home","timetable","seating","students","attendance","observe","calendar","memo","tools","settings"].includes(startView) ? startView : "home");
 }
 
 start();
