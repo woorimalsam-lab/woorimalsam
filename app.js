@@ -1335,7 +1335,9 @@ function setView(name) {
   if (name === "home") renderDashboard();
   if (name === "timetable") {
     const fr = $("tt-frame");
-    if (fr && !fr.src) fr.src = COMCI_BASE + "/";   // 최초 진입 시에만 로드
+    const theme = document.documentElement.getAttribute("data-theme") || "light";
+    if (fr && !fr.src) fr.src = `${COMCI_BASE}/?theme=${theme}`;   // 최초 진입 시에만 로드
+    else if (fr) syncFrameTheme();   // 이미 로드됐으면 테마만 전달
     loadComci();
     renderProgress();
   }
@@ -1366,6 +1368,16 @@ function applyTheme(theme) {
   if (btn) {
     btn.textContent = theme === "dark" ? "☀️" : "🌙";
     btn.title = theme === "dark" ? "라이트 모드 전환" : "다크 모드 전환";
+  }
+  syncFrameTheme();   // 임베드된 시간표 뷰어에도 테마 전달
+}
+
+// 임베드 시간표 뷰어에 현재 테마 전달 (postMessage)
+function syncFrameTheme() {
+  const fr = $("tt-frame");
+  const theme = document.documentElement.getAttribute("data-theme") || "light";
+  if (fr && fr.contentWindow && fr.src) {
+    try { fr.contentWindow.postMessage({ type: "theme", theme }, "*"); } catch (e) { /* ignore */ }
   }
 }
 function initTheme() {

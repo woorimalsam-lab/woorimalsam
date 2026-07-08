@@ -660,11 +660,13 @@ body {
    시간표, 자리배치, 학생, 도구, 설정
 ============================================================ */
 
-/* 시간표(컴시간 뷰어 임베드) + 수업진도표 세로 배치 */
-.tt-embed-panel { margin-bottom: 16px; }
+/* 시간표(컴시간 뷰어) 왼쪽 + 수업진도표 오른쪽 2단 */
+.tt-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.tt-embed-panel, .progress-panel { min-width: 0; }
 .tt-frame-wrap { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .tt-frame { width: 100%; height: 760px; border: 0; display: block; background: #fff; }
-@media (max-width: 640px) { .tt-frame { height: 620px; } }
+@media (max-width: 1000px) { .tt-layout { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .tt-frame { height: 640px; } }
 
 /* 수업진도표 (날짜 × 학급 매트릭스) */
 .progress-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
