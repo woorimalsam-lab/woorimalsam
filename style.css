@@ -459,7 +459,14 @@ body {
   transition: box-shadow 0.15s ease, transform 0.1s ease;
 }
 .memo-item:hover { box-shadow: 0 4px 14px rgba(30,40,70,0.13); }
-.memo-content { font-size: 0.93rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: #2b303b; }
+.memo-content { font-size: 0.93rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: #2b303b; cursor: text; }
+.memo-edit {
+  width: 100%; border: 1px dashed var(--primary); border-radius: 8px;
+  padding: 6px 8px; font-family: inherit; font-size: 0.93rem; line-height: 1.5;
+  background: rgba(255,255,255,0.6); color: #2b303b; resize: none; overflow: hidden;
+}
+.memo-edit:focus { outline: none; }
+[data-theme="dark"] .memo-edit { background: rgba(0,0,0,0.25); color: var(--ink); }
 
 /* 카드 색상 */
 .mc-default { background: #ffffff; }

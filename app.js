@@ -770,6 +770,8 @@ function makeMemoItem(m) {
   const content = document.createElement("div");
   content.className = "memo-content";
   content.textContent = m.text;
+  content.title = "클릭하여 수정";
+  content.addEventListener("click", () => startMemoEdit(li, m));
   li.appendChild(content);
 
   const foot = document.createElement("div");
@@ -813,18 +815,62 @@ function makeMemoItem(m) {
     if (move.value !== cat && move.value !== UNCAT) moveMemo(m.id, move.value);
   });
 
+  // 수정
+  const edit = iconBtn("✏️", "수정");
+  edit.addEventListener("click", () => startMemoEdit(li, m));
+
   // 삭제
   const del = iconBtn("🗑", "삭제");
   del.classList.add("memo-del");
   del.addEventListener("click", () => removeMemo(m.id));
 
-  actions.append(pin, palette, move, del);
+  actions.append(pin, palette, move, edit, del);
   foot.appendChild(actions);
   li.appendChild(foot);
 
   if (state.paletteFor === m.id) li.appendChild(makeColorPalette(m));
 
   return li;
+}
+
+// 메모 제자리 수정: 본문을 textarea로 바꿔 편집, 블러/Ctrl+Enter 저장, Esc 취소
+function startMemoEdit(li, m) {
+  if (li.querySelector(".memo-edit")) return;   // 이미 편집 중
+  const content = li.querySelector(".memo-content");
+  if (!content) return;
+
+  const ta = document.createElement("textarea");
+  ta.className = "memo-edit";
+  ta.value = m.text;
+  content.replaceWith(ta);
+  ta.style.height = "auto";
+  ta.style.height = ta.scrollHeight + "px";
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  ta.addEventListener("input", () => {
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+  });
+
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const text = ta.value.trim();
+    if (!save || text === m.text.trim()) { renderMemos(); return; }   // 변경 없음/취소 → 원상복구
+    if (!text) {
+      if (confirm("내용이 비었습니다. 이 메모를 삭제할까요?")) await removeMemo(m.id);
+      else renderMemos();
+      return;
+    }
+    await updateMemo(m.id, { text });
+    toast("메모를 수정했습니다");
+  };
+  ta.addEventListener("blur", () => finish(true));
+  ta.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); ta.blur(); }
+    if (e.key === "Escape") finish(false);
+  });
 }
 
 function subscribeMemos() {
