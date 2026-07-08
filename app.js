@@ -1596,75 +1596,93 @@ function timetableClasses() {
   return [...set].sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
 }
 
+let progressDraftDates = new Set();   // 기록 전 임시로 추가한 수업일(세션 한정)
+
+// (학급, 날짜)에 해당하는 기록 (없으면 null)
+function progressCell(cls, date) {
+  return (progress[cls] || []).find((r) => r.date === date) || null;
+}
+
+// 날짜 × 학급 진도표 렌더 — 일자별로 쭉, 각 학급 칸은 즉시 편집·저장
 function renderProgress() {
   const list = $("progress-list");
   if (!list) return;
-
-  // 학급 드롭다운 갱신 (선택 유지)
-  const sel = $("progress-class");
-  const classes = timetableClasses();
-  const prev = sel.value;
-  sel.innerHTML = classes.length
-    ? classes.map((c) => {
-        const n = (progress[c] || []).length;
-        return `<option value="${escapeHtml(c)}">${escapeHtml(c)}${n ? ` (${n})` : ""}</option>`;
-      }).join("")
-    : '<option value="">시간표에 학급이 없습니다</option>';
-  if (classes.includes(prev)) sel.value = prev;
   if (!$("progress-date").value) $("progress-date").value = todayStr();
 
-  const cls = sel.value;
-  if (!cls) {
+  const classes = timetableClasses();
+  if (!classes.length) {
     $("progress-count").textContent = "";
     list.innerHTML = '<p class="muted" style="text-align:center; padding: 18px;">시간표에 수업(학급)을 먼저 입력하면 여기서 진도를 기록할 수 있어요.</p>';
     return;
   }
 
-  const recs = [...(progress[cls] || [])].sort((a, b) => b.date.localeCompare(a.date));
-  $("progress-count").textContent = recs.length ? `${recs.length}차시` : "";
-  if (!recs.length) {
-    list.innerHTML = '<p class="muted" style="text-align:center; padding: 18px;">아직 기록이 없습니다. 위에서 첫 진도를 기록해 보세요.</p>';
+  // 모든 기록 날짜 + 임시로 추가한 날짜 → 오름차순(과거 → 최근)
+  const dateSet = new Set(progressDraftDates);
+  let total = 0;
+  for (const c of classes) for (const r of (progress[c] || [])) { dateSet.add(r.date); total++; }
+  const dates = [...dateSet].sort();
+
+  $("progress-count").textContent = total ? `${total}건` : "";
+  if (!dates.length) {
+    list.innerHTML = '<p class="muted" style="text-align:center; padding: 18px;">위에서 <b>수업일</b>을 추가하면 날짜별로 진도를 적을 수 있어요.</p>';
     return;
   }
-  list.innerHTML = recs.map((r) => {
-    const [y, m, d] = r.date.split("-").map(Number);
-    const wd = "일월화수목금토"[new Date(y, m - 1, d).getDay()];
-    return `
-    <div class="progress-item" data-pid="${r.id}">
-      <div class="progress-item-head">
-        <span class="progress-date-badge">${m}/${d} (${wd})</span>
-        <span class="spacer"></span>
-        <button class="progress-del" data-pid="${r.id}" title="삭제">✕</button>
-      </div>
-      <textarea class="progress-item-text" data-pid="${r.id}" rows="1">${escapeHtml(r.content)}</textarea>
-    </div>`;
-  }).join("");
+
+  const wdName = (ds) => { const [y, m, d] = ds.split("-").map(Number); return "일월화수목금토"[new Date(y, m - 1, d).getDay()]; };
+  let html = '<table class="progress-matrix"><thead><tr><th class="pm-date-h">날짜</th>';
+  for (const c of classes) html += `<th>${escapeHtml(c)}</th>`;
+  html += "</tr></thead><tbody>";
+  for (const ds of dates) {
+    const [y, m, d] = ds.split("-").map(Number);
+    html += `<tr><td class="pm-date">${m}/${d}<span class="pm-wd">(${wdName(ds)})</span></td>`;
+    for (const c of classes) {
+      const rec = progressCell(c, ds);
+      html += `<td><textarea class="progress-cell" data-cls="${escapeHtml(c)}" data-date="${ds}" data-pid="${rec ? rec.id : ""}" rows="1" placeholder="–">${rec ? escapeHtml(rec.content) : ""}</textarea></td>`;
+    }
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+  list.innerHTML = html;
+
+  // 내용에 맞춰 칸 높이 자동
+  list.querySelectorAll(".progress-cell").forEach((ta) => {
+    ta.style.height = "auto";
+    ta.style.height = Math.max(34, ta.scrollHeight) + "px";
+  });
 }
 
-function addProgress() {
-  const cls = $("progress-class")?.value;
-  if (!cls) { toast("시간표에 학급(수업)을 먼저 입력해 주세요"); return; }
-  const content = $("progress-content").value.trim();
-  if (!content) { toast("진도 내용을 입력해 주세요"); return; }
+// 수업일(빈 행) 추가
+function addProgressDate() {
   const date = $("progress-date").value || todayStr();
-  (progress[cls] ||= []).push({ id: uid(), date, content });
-  saveProgress();
-  $("progress-content").value = "";
+  progressDraftDates.add(date);
   renderProgress();
-  toast("📖 진도를 기록했습니다");
+  // 방금 추가한 날짜의 첫 학급 칸에 포커스
+  const first = $("progress-list").querySelector(`.progress-cell[data-date="${date}"]`);
+  if (first) first.focus();
 }
-function removeProgress(cls, pid) {
-  progress[cls] = (progress[cls] || []).filter((r) => r.id !== pid);
-  if (!progress[cls].length) delete progress[cls];
-  saveProgress();
-  renderProgress();
-}
-function updateProgress(cls, pid, content) {
-  const r = (progress[cls] || []).find((x) => x.id === pid);
-  if (!r) return;
-  if (!content.trim()) { removeProgress(cls, pid); return; }
-  r.content = content;
-  saveProgress();
+
+// 칸 편집 저장: 있으면 수정/삭제, 없으면 생성
+function saveProgressCell(cls, date, pid, value) {
+  const val = value.trim();
+  const arr = (progress[cls] ||= []);
+  if (pid) {
+    const r = arr.find((x) => x.id === pid);
+    if (!r) return false;
+    if (!val) {
+      progress[cls] = arr.filter((x) => x.id !== pid);
+      if (!progress[cls].length) delete progress[cls];
+      saveProgress();
+      return true;   // 구조 변경 → 재렌더 필요
+    }
+    if (r.content !== val) { r.content = val; saveProgress(); }
+    return false;
+  }
+  if (val) {
+    arr.push({ id: uid(), date, content: val });
+    saveProgress();
+    return true;   // 새 칸 → 재렌더(칸에 pid 부여)
+  }
+  return false;
 }
 
 // 선택 학급 또는 전체 진도표를 엑셀로
@@ -3019,21 +3037,26 @@ function bindEventsNew() {
     toast("시간표가 저장되었습니다");
   });
 
-  // 수업진도표
-  $("progress-class")?.addEventListener("change", renderProgress);
-  $("progress-add-btn")?.addEventListener("click", addProgress);
-  $("progress-content")?.addEventListener("keydown", (e) => { if (e.key === "Enter") addProgress(); });
+  // 수업진도표 (날짜 × 학급 매트릭스)
+  $("progress-adddate-btn")?.addEventListener("click", addProgressDate);
   $("progress-export-btn")?.addEventListener("click", exportProgress);
-  $("progress-list")?.addEventListener("click", (e) => {
-    const del = e.target.closest(".progress-del");
-    if (!del) return;
-    const cls = $("progress-class")?.value;
-    if (cls && confirm("이 진도 기록을 삭제할까요?")) removeProgress(cls, del.dataset.pid);
+  // 칸 편집 저장 (blur 시)
+  $("progress-list")?.addEventListener("focusout", (e) => {
+    const ta = e.target.closest(".progress-cell");
+    if (!ta) return;
+    const needReRender = saveProgressCell(ta.dataset.cls, ta.dataset.date, ta.dataset.pid, ta.value);
+    if (needReRender) renderProgress();
   });
-  $("progress-list")?.addEventListener("change", (e) => {
-    if (!e.target.classList.contains("progress-item-text")) return;
-    const cls = $("progress-class")?.value;
-    if (cls) updateProgress(cls, e.target.dataset.pid, e.target.value);
+  // 입력 중 높이 자동 조절
+  $("progress-list")?.addEventListener("input", (e) => {
+    const ta = e.target.closest(".progress-cell");
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.max(34, ta.scrollHeight) + "px";
+  });
+  // Ctrl/Cmd+Enter로 저장(포커스 이탈)
+  $("progress-list")?.addEventListener("keydown", (e) => {
+    if (e.target.closest(".progress-cell") && (e.ctrlKey || e.metaKey) && e.key === "Enter") e.target.blur();
   });
   $("cancel-timetable-btn")?.addEventListener("click", () => {
     loadTimetable();   // 편집 중 변경 되돌리기

@@ -117,19 +117,15 @@
           </div>
 
           <div class="progress-toolbar">
-            <label>학급 선택:
-              <select id="progress-class" title="시간표에 있는 학급"></select>
+            <label>수업일 추가:
+              <input id="progress-date" type="date" title="수업 일자" />
             </label>
+            <button id="progress-adddate-btn" class="btn btn-primary btn-sm">＋ 날짜 추가</button>
             <span id="progress-count" class="muted"></span>
           </div>
+          <p class="progress-hint muted">날짜를 추가한 뒤, 각 학급 칸에 진도(단원·차시)를 적으면 자동 저장됩니다.</p>
 
-          <div class="progress-compose">
-            <input id="progress-date" type="date" title="수업 일자" />
-            <input id="progress-content" type="text" placeholder="단원 · 차시 · 진도 내용" />
-            <button id="progress-add-btn" class="btn btn-primary btn-sm">기록</button>
-          </div>
-
-          <div id="progress-list" class="progress-list"></div>
+          <div id="progress-list" class="progress-matrix-wrap"></div>
         </div>
       </div>
     </section>
