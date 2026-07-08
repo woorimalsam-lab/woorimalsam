@@ -1300,7 +1300,7 @@ function setView(name) {
 
   // 각 뷰별 초기화
   if (name === "home") renderDashboard();
-  if (name === "timetable") renderTimetable();
+  if (name === "timetable") { renderTimetable(); renderProgress(); }
   if (name === "seating") renderSeating();
   if (name === "students") renderStudents();
   if (name === "attendance") renderAttendance();
@@ -1566,6 +1566,124 @@ function collectTimetableInputs() {
     TT_DAY_KEYS.forEach((d) => { if (cells[d][p] === undefined) cells[d][p] = ""; });
   }
   state.timetable = { times, cells };
+}
+
+// ============================================================
+//  학급별 수업진도표 (시간표의 학급 라벨 기준)
+// ============================================================
+const LOCAL_PROGRESS_KEY = "myplanner.progress";
+// 저장 구조: { "<학급 라벨>": [ {id, date, content}, ... ] }
+let progress = {};
+
+function loadProgress() {
+  const p = loadLocal(LOCAL_PROGRESS_KEY);
+  progress = (p && !Array.isArray(p)) ? p : {};
+}
+function saveProgress() {
+  saveLocal(LOCAL_PROGRESS_KEY, progress);
+}
+// 시간표 셀의 서로 다른 학급 라벨 (예: "206 화언", "207 화언" …)
+function timetableClasses() {
+  const set = new Set();
+  for (const k of TT_DAY_KEYS) {
+    for (const cell of state.timetable.cells[k] || []) {
+      const v = (cell || "").trim();
+      if (v) set.add(v);
+    }
+  }
+  // 기록만 있고 시간표엔 없는 학급도 목록에 포함 (편집으로 지워도 기록 유지)
+  for (const label of Object.keys(progress)) if (!set.has(label)) set.add(label);
+  return [...set].sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
+}
+
+function renderProgress() {
+  const list = $("progress-list");
+  if (!list) return;
+
+  // 학급 드롭다운 갱신 (선택 유지)
+  const sel = $("progress-class");
+  const classes = timetableClasses();
+  const prev = sel.value;
+  sel.innerHTML = classes.length
+    ? classes.map((c) => {
+        const n = (progress[c] || []).length;
+        return `<option value="${escapeHtml(c)}">${escapeHtml(c)}${n ? ` (${n})` : ""}</option>`;
+      }).join("")
+    : '<option value="">시간표에 학급이 없습니다</option>';
+  if (classes.includes(prev)) sel.value = prev;
+  if (!$("progress-date").value) $("progress-date").value = todayStr();
+
+  const cls = sel.value;
+  if (!cls) {
+    $("progress-count").textContent = "";
+    list.innerHTML = '<p class="muted" style="text-align:center; padding: 18px;">시간표에 수업(학급)을 먼저 입력하면 여기서 진도를 기록할 수 있어요.</p>';
+    return;
+  }
+
+  const recs = [...(progress[cls] || [])].sort((a, b) => b.date.localeCompare(a.date));
+  $("progress-count").textContent = recs.length ? `${recs.length}차시` : "";
+  if (!recs.length) {
+    list.innerHTML = '<p class="muted" style="text-align:center; padding: 18px;">아직 기록이 없습니다. 위에서 첫 진도를 기록해 보세요.</p>';
+    return;
+  }
+  list.innerHTML = recs.map((r) => {
+    const [y, m, d] = r.date.split("-").map(Number);
+    const wd = "일월화수목금토"[new Date(y, m - 1, d).getDay()];
+    return `
+    <div class="progress-item" data-pid="${r.id}">
+      <div class="progress-item-head">
+        <span class="progress-date-badge">${m}/${d} (${wd})</span>
+        <span class="spacer"></span>
+        <button class="progress-del" data-pid="${r.id}" title="삭제">✕</button>
+      </div>
+      <textarea class="progress-item-text" data-pid="${r.id}" rows="1">${escapeHtml(r.content)}</textarea>
+    </div>`;
+  }).join("");
+}
+
+function addProgress() {
+  const cls = $("progress-class")?.value;
+  if (!cls) { toast("시간표에 학급(수업)을 먼저 입력해 주세요"); return; }
+  const content = $("progress-content").value.trim();
+  if (!content) { toast("진도 내용을 입력해 주세요"); return; }
+  const date = $("progress-date").value || todayStr();
+  (progress[cls] ||= []).push({ id: uid(), date, content });
+  saveProgress();
+  $("progress-content").value = "";
+  renderProgress();
+  toast("📖 진도를 기록했습니다");
+}
+function removeProgress(cls, pid) {
+  progress[cls] = (progress[cls] || []).filter((r) => r.id !== pid);
+  if (!progress[cls].length) delete progress[cls];
+  saveProgress();
+  renderProgress();
+}
+function updateProgress(cls, pid, content) {
+  const r = (progress[cls] || []).find((x) => x.id === pid);
+  if (!r) return;
+  if (!content.trim()) { removeProgress(cls, pid); return; }
+  r.content = content;
+  saveProgress();
+}
+
+// 선택 학급 또는 전체 진도표를 엑셀로
+async function exportProgress() {
+  const total = Object.values(progress).reduce((n, arr) => n + arr.length, 0);
+  if (!total) { toast("내보낼 진도 기록이 없습니다"); return; }
+  try { await ensureXLSX(); } catch (e) { toast(e.message); return; }
+
+  const rows = [["학급", "날짜", "진도 내용"]];
+  for (const cls of timetableClasses()) {
+    const recs = [...(progress[cls] || [])].sort((a, b) => a.date.localeCompare(b.date));
+    for (const r of recs) rows.push([cls, r.date, r.content]);
+  }
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 50 }];
+  XLSX.utils.book_append_sheet(wb, ws, "수업진도표");
+  XLSX.writeFile(wb, `수업진도표_${todayStr()}.xlsx`);
+  toast(`📥 진도 기록 ${total}건을 엑셀로 저장했습니다`);
 }
 
 // ============================================================
@@ -2897,7 +3015,25 @@ function bindEventsNew() {
     saveTimetable();
     $("timetable-editor").classList.add("hidden");
     renderTimetable();
+    renderProgress();   // 새 학급이 진도표 목록에 반영되도록
     toast("시간표가 저장되었습니다");
+  });
+
+  // 수업진도표
+  $("progress-class")?.addEventListener("change", renderProgress);
+  $("progress-add-btn")?.addEventListener("click", addProgress);
+  $("progress-content")?.addEventListener("keydown", (e) => { if (e.key === "Enter") addProgress(); });
+  $("progress-export-btn")?.addEventListener("click", exportProgress);
+  $("progress-list")?.addEventListener("click", (e) => {
+    const del = e.target.closest(".progress-del");
+    if (!del) return;
+    const cls = $("progress-class")?.value;
+    if (cls && confirm("이 진도 기록을 삭제할까요?")) removeProgress(cls, del.dataset.pid);
+  });
+  $("progress-list")?.addEventListener("change", (e) => {
+    if (!e.target.classList.contains("progress-item-text")) return;
+    const cls = $("progress-class")?.value;
+    if (cls) updateProgress(cls, e.target.dataset.pid, e.target.value);
   });
   $("cancel-timetable-btn")?.addEventListener("click", () => {
     loadTimetable();   // 편집 중 변경 되돌리기
@@ -3232,6 +3368,7 @@ async function start() {
   loadAttendance();
   loadAttShare();
   loadObservations();
+  loadProgress();
 
   // 현재 교시 하이라이트를 1분마다 갱신
   setInterval(() => {

@@ -84,26 +84,52 @@
       </div>
     </section>
 
-    <!-- ============ 시간표 ============ -->
+    <!-- ============ 시간표 + 수업진도표 ============ -->
     <section id="view-timetable" class="view hidden">
-      <div class="panel">
-        <div class="panel-head">
-          <h2>시간표</h2>
-          <button id="edit-timetable-btn" class="btn btn-primary btn-sm">편집</button>
+      <div class="tt-layout">
+        <!-- 왼쪽: 시간표 -->
+        <div class="panel tt-panel">
+          <div class="panel-head">
+            <h2>시간표</h2>
+            <button id="edit-timetable-btn" class="btn btn-primary btn-sm">편집</button>
+          </div>
+
+          <div id="timetable-display" class="timetable-display"></div>
+
+          <div id="timetable-editor" class="timetable-editor hidden">
+            <div class="tt-controls">
+              <label>교시 수: <input id="tt-periods" type="number" value="7" min="1" max="10" /></label>
+              <span class="spacer"></span>
+              <button id="save-timetable-btn" class="btn btn-primary">저장</button>
+              <button id="cancel-timetable-btn" class="btn btn-ghost">취소</button>
+            </div>
+            <div class="timetable-editor-wrapper">
+              <table class="timetable-grid" id="timetable-grid"></table>
+            </div>
+          </div>
         </div>
 
-        <div id="timetable-display" class="timetable-display"></div>
+        <!-- 오른쪽: 학급별 수업진도표 -->
+        <div class="panel progress-panel">
+          <div class="panel-head">
+            <h2>수업진도표</h2>
+            <button id="progress-export-btn" class="btn btn-ghost btn-sm">📥 엑셀</button>
+          </div>
 
-        <div id="timetable-editor" class="timetable-editor hidden">
-          <div class="tt-controls">
-            <label>교시 수: <input id="tt-periods" type="number" value="7" min="1" max="10" /></label>
-            <span class="spacer"></span>
-            <button id="save-timetable-btn" class="btn btn-primary">저장</button>
-            <button id="cancel-timetable-btn" class="btn btn-ghost">취소</button>
+          <div class="progress-toolbar">
+            <label>학급 선택:
+              <select id="progress-class" title="시간표에 있는 학급"></select>
+            </label>
+            <span id="progress-count" class="muted"></span>
           </div>
-          <div class="timetable-editor-wrapper">
-            <table class="timetable-grid" id="timetable-grid"></table>
+
+          <div class="progress-compose">
+            <input id="progress-date" type="date" title="수업 일자" />
+            <input id="progress-content" type="text" placeholder="단원 · 차시 · 진도 내용" />
+            <button id="progress-add-btn" class="btn btn-primary btn-sm">기록</button>
           </div>
+
+          <div id="progress-list" class="progress-list"></div>
         </div>
       </div>
     </section>
