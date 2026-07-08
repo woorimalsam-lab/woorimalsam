@@ -928,6 +928,8 @@ async function initFirebase() {
         migrationChecked = true;
         await maybeMigrateLocal(user);
       }
+      // 게시판 공유가 켜져 있으면 로그인 시점에 최신 출결을 한 번 발행
+      if (attShare) publishAttendance();
     } else {
       state.synced = false;
       state.allEvents = [];
@@ -2296,6 +2298,75 @@ function loadAttendance() {
 }
 function saveAttendance() {
   saveLocal(LOCAL_ATTENDANCE_KEY, attendance);
+  schedulePublishAttendance();
+}
+
+// ---- 학급 게시판 공유 ----------------------------------------
+// 켜두면 출결 저장 시 Firestore(classboard/attendance)에 자동 발행되어
+// 학급 게시판(https://woorimalsam-lab.github.io/classboard/)에 표시됩니다.
+// 학생 개인정보 보호를 위해 비고(n)는 공유하지 않습니다.
+const LOCAL_ATT_SHARE_KEY = "myplanner.attShare";
+let attShare = false;
+let attPublishTimer = null;
+
+function loadAttShare() {
+  attShare = localStorage.getItem(LOCAL_ATT_SHARE_KEY) === "1";
+  renderAttShareBtn();
+}
+function renderAttShareBtn() {
+  const btn = $("att-share-btn");
+  if (!btn) return;
+  btn.textContent = attShare ? "🌐 게시판 공유: 켜짐" : "🌐 게시판 공유: 꺼짐";
+  btn.classList.toggle("btn-primary", attShare);
+  btn.classList.toggle("btn-ghost", !attShare);
+}
+async function toggleAttShare() {
+  if (!attShare && (!fb || !state.user)) {
+    toast("게시판 공유는 구글 로그인 후 사용할 수 있습니다");
+    return;
+  }
+  attShare = !attShare;
+  localStorage.setItem(LOCAL_ATT_SHARE_KEY, attShare ? "1" : "0");
+  renderAttShareBtn();
+  if (attShare) {
+    await publishAttendance();
+    toast("이제 출결을 입력하면 학급 게시판에 자동 반영됩니다 🌐");
+  } else {
+    toast("게시판 공유를 껐습니다 (이미 공유된 내용은 남아 있습니다)");
+  }
+}
+function schedulePublishAttendance() {
+  if (!attShare || !fb || !state.user) return;
+  clearTimeout(attPublishTimer);
+  attPublishTimer = setTimeout(publishAttendance, 1500);
+}
+async function publishAttendance() {
+  if (!fb || !state.user) return;
+  try {
+    const byId = Object.fromEntries(state.students.map((s) => [s.id, s]));
+    const days = {};
+    for (const [date, classes] of Object.entries(attendance)) {
+      for (const [classKey, recs] of Object.entries(classes)) {
+        const list = Object.entries(recs)
+          .filter(([, r]) => r.s && r.s !== "출석")   // 지각·조퇴·결석만 공유 (비고만 있는 학생 제외)
+          .map(([sid, r]) => ({
+            no: Number(byId[sid]?.number) || 0,
+            name: byId[sid]?.name || "(명단 외)",
+            s: r.s,
+            label: attLabel(r),
+          }));
+        if (list.length) (days[date] ||= {})[classKey] = list;
+      }
+    }
+    const { doc, setDoc } = fb.fs;
+    await setDoc(doc(fb.db, "classboard", "attendance"), {
+      updatedAt: new Date().toISOString(),
+      days,
+    });
+  } catch (e) {
+    console.error("출결 게시판 공유 실패", e);
+    toast("게시판 공유 실패 — Firestore 규칙 설정을 확인해 주세요", 6000);
+  }
 }
 function attKey() {
   return `${$("att-grade")?.value ?? ""}-${$("att-class")?.value ?? ""}`;
@@ -3089,6 +3160,7 @@ function bindEventsNew() {
     renderAttendance();
   });
   $("att-export-btn")?.addEventListener("click", exportAttendanceMonth);
+  $("att-share-btn")?.addEventListener("click", toggleAttShare);
 
   // 학생관찰 기록
   $("obs-grade")?.addEventListener("change", () => {
@@ -3158,6 +3230,7 @@ async function start() {
   loadSettings();
   loadPickLog();
   loadAttendance();
+  loadAttShare();
   loadObservations();
 
   // 현재 교시 하이라이트를 1분마다 갱신
