@@ -660,13 +660,12 @@ body {
    시간표, 자리배치, 학생, 도구, 설정
 ============================================================ */
 
-/* 시간표(컴시간 뷰어) 왼쪽 + 수업진도표 오른쪽 2단 */
-.tt-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+/* 시간표(컴시간 뷰어) 위 + 수업진도표 아래 전체폭 (진도표 한눈에) */
+.tt-layout { display: flex; flex-direction: column; gap: 16px; }
 .tt-embed-panel, .progress-panel { min-width: 0; }
 .tt-frame-wrap { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.tt-frame { width: 100%; height: 760px; border: 0; display: block; background: #fff; }
-@media (max-width: 1000px) { .tt-layout { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .tt-frame { height: 640px; } }
+.tt-frame { width: 100%; height: 620px; border: 0; display: block; background: #fff; }
+@media (max-width: 640px) { .tt-frame { height: 560px; } }
 
 /* 수업진도표 (날짜 × 학급 매트릭스) */
 .progress-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
@@ -674,30 +673,44 @@ body {
 .progress-toolbar input[type="date"] { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); }
 .progress-hint { margin: 0 0 12px; font-size: 0.8rem; }
 
-.progress-matrix-wrap { overflow-x: auto; }
-.progress-matrix { width: 100%; border-collapse: collapse; }
-.progress-matrix th, .progress-matrix td { border: 1px solid var(--line); vertical-align: top; }
+.progress-matrix-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 12px; }
+.progress-matrix { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.progress-matrix th, .progress-matrix td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); vertical-align: top; }
+.progress-matrix th:last-child, .progress-matrix td:last-child { border-right: 0; }
+/* 헤더(학급) 상단 고정 */
 .progress-matrix thead th {
-  background: var(--accent-soft); font-size: 0.8rem; font-weight: 700;
-  padding: 7px 6px; white-space: nowrap; position: sticky; top: 0;
+  background: var(--accent-soft); font-size: 0.9rem; font-weight: 700;
+  padding: 10px 8px; white-space: nowrap; text-align: center;
+  position: sticky; top: 0; z-index: 3;
 }
+/* 날짜 열: 왼쪽 고정 */
+.progress-matrix th.pm-date-h { left: 0; z-index: 4; width: 66px; }
 .progress-matrix td.pm-date {
-  background: var(--accent-soft); font-weight: 700; font-size: 0.8rem;
-  text-align: center; white-space: nowrap; padding: 4px 8px; min-width: 54px;
+  background: var(--accent-soft); font-weight: 700; font-size: 0.82rem;
+  text-align: center; white-space: nowrap; padding: 8px 6px; width: 66px;
+  position: sticky; left: 0; z-index: 2;
 }
-.pm-wd { display: block; font-size: 0.68rem; font-weight: 400; color: var(--muted); }
+.pm-wd { display: block; font-size: 0.7rem; font-weight: 400; color: var(--muted); margin-top: 2px; }
+/* 행 구분(줄무늬) + hover 강조 */
+.progress-matrix tbody tr:nth-child(even) td { background: var(--accent-soft); }
+.progress-matrix tbody tr:nth-child(even) td.pm-date { background: #dfe7fb; }
+.progress-matrix tbody tr:hover td { background: #eef3ff; }
 .progress-cell {
-  width: 100%; min-width: 120px; box-sizing: border-box;
+  width: 100%; box-sizing: border-box;
   border: none; background: transparent; color: var(--ink);
-  font-family: inherit; font-size: 0.85rem; line-height: 1.4;
-  padding: 5px 6px; resize: none; overflow: hidden; display: block;
+  font-family: inherit; font-size: 0.9rem; line-height: 1.45;
+  padding: 8px; resize: none; overflow: hidden; display: block; min-height: 40px;
 }
-.progress-cell::placeholder { color: var(--line); }
+.progress-cell::placeholder { color: var(--muted); opacity: 0.5; }
 .progress-cell:focus { outline: 2px solid var(--primary); outline-offset: -2px; background: var(--panel); border-radius: 4px; }
 
+[data-theme="dark"] .progress-matrix-wrap { border-color: #2a2e38; }
 [data-theme="dark"] .progress-toolbar input[type="date"] { background: #1f2430; border-color: #2a2e38; }
 [data-theme="dark"] .progress-matrix th, [data-theme="dark"] .progress-matrix td { border-color: #2a2e38; }
 [data-theme="dark"] .progress-matrix thead th, [data-theme="dark"] .progress-matrix td.pm-date { background: #262c3a; }
+[data-theme="dark"] .progress-matrix tbody tr:nth-child(even) td { background: #21262f; }
+[data-theme="dark"] .progress-matrix tbody tr:nth-child(even) td.pm-date { background: #2b3340; }
+[data-theme="dark"] .progress-matrix tbody tr:hover td { background: #2a3140; }
 [data-theme="dark"] .progress-cell:focus { background: #1f2430; }
 
 /* 시간표 */
