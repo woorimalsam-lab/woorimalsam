@@ -106,13 +106,14 @@
           </div>
 
           <div class="progress-toolbar">
-            <label>수업일 추가:
-              <input id="progress-date" type="date" title="수업 일자" />
-            </label>
-            <button id="progress-adddate-btn" class="btn btn-primary btn-sm">＋ 날짜 추가</button>
+            <button id="prog-prev" class="btn btn-icon" title="이전 주">‹</button>
+            <span id="prog-week" class="prog-week"></span>
+            <button id="prog-next" class="btn btn-icon" title="다음 주">›</button>
+            <button id="prog-thisweek" class="btn btn-ghost btn-sm">이번 주</button>
+            <span class="spacer"></span>
             <span id="progress-count" class="muted"></span>
           </div>
-          <p class="progress-hint muted">학급 열은 내 시간표(컴시간)에서 자동으로 가져옵니다. 날짜를 추가한 뒤 각 학급 칸에 진도를 적으면 자동 저장됩니다.</p>
+          <p class="progress-hint muted">이번 주 각 학급의 진도를 요일별로 기록합니다. 학급은 내 시간표(컴시간)에서 자동으로 가져옵니다.</p>
 
           <div id="progress-list" class="progress-matrix-wrap"></div>
         </div>

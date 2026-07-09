@@ -660,12 +660,16 @@ body {
    시간표, 자리배치, 학생, 도구, 설정
 ============================================================ */
 
-/* 시간표(컴시간 뷰어) 위 + 수업진도표 아래 전체폭 (진도표 한눈에) */
-.tt-layout { display: flex; flex-direction: column; gap: 16px; }
+/* 시간표(왼쪽, 좁게) + 수업진도표(오른쪽, 넓게) 2단 */
+.tt-layout { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
 .tt-embed-panel, .progress-panel { min-width: 0; }
 .tt-frame-wrap { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.tt-frame { width: 100%; height: 620px; border: 0; display: block; background: #fff; }
+.tt-frame { width: 100%; height: 700px; border: 0; display: block; background: #fff; }
+@media (max-width: 1000px) { .tt-layout { grid-template-columns: 1fr; } .tt-frame { height: 600px; } }
 @media (max-width: 640px) { .tt-frame { height: 560px; } }
+
+/* 주간 이동 */
+.prog-week { font-weight: 700; font-size: 0.95rem; min-width: 96px; text-align: center; }
 
 /* 수업진도표 (날짜 × 학급 매트릭스) */
 .progress-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
@@ -686,11 +690,15 @@ body {
 /* 날짜 열: 왼쪽 고정 */
 .progress-matrix th.pm-date-h { left: 0; z-index: 4; width: 66px; }
 .progress-matrix td.pm-date {
-  background: var(--accent-soft); font-weight: 700; font-size: 0.82rem;
-  text-align: center; white-space: nowrap; padding: 8px 6px; width: 66px;
+  background: var(--accent-soft); font-weight: 700; font-size: 0.92rem;
+  text-align: center; white-space: nowrap; padding: 8px 6px; width: 58px;
   position: sticky; left: 0; z-index: 2;
 }
 .pm-wd { display: block; font-size: 0.7rem; font-weight: 400; color: var(--muted); margin-top: 2px; }
+/* 오늘 요일 강조 */
+.progress-matrix tr.pm-today td.pm-date { color: var(--primary); }
+.progress-matrix tr.pm-today td { background: var(--today) !important; }
+[data-theme="dark"] .progress-matrix tr.pm-today td { background: #3a3320 !important; }
 /* 행 구분(줄무늬) + hover 강조 */
 .progress-matrix tbody tr:nth-child(even) td { background: var(--accent-soft); }
 .progress-matrix tbody tr:nth-child(even) td.pm-date { background: #dfe7fb; }

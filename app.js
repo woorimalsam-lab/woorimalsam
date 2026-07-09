@@ -1720,45 +1720,56 @@ function timetableClasses() {
   return [...set].sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
 }
 
-let progressDraftDates = new Set();   // 기록 전 임시로 추가한 수업일(세션 한정)
 
 // (학급, 날짜)에 해당하는 기록 (없으면 null)
 function progressCell(cls, date) {
   return (progress[cls] || []).find((r) => r.date === date) || null;
 }
 
-// 날짜 × 학급 진도표 렌더 — 일자별로 쭉, 각 학급 칸은 즉시 편집·저장
+// ---------- 주간 이동 ----------
+let progWeekStart = "";   // 현재 보는 주의 월요일 (YYYY-MM-DD)
+function ymdAdd(ds, n) { const [y, m, d] = ds.split("-").map(Number); return ymd(new Date(y, m - 1, d + n)); }
+function mondayOf(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const off = (dt.getDay() + 6) % 7;   // 월=0 … 일=6
+  dt.setDate(dt.getDate() - off);
+  return ymd(dt);
+}
+function ensureWeek() { if (!progWeekStart) progWeekStart = mondayOf(todayStr()); }
+function shiftProgWeek(n) { ensureWeek(); progWeekStart = ymdAdd(progWeekStart, n * 7); renderProgress(); }
+function thisProgWeek() { progWeekStart = mondayOf(todayStr()); renderProgress(); }
+
+// 주간(월~금) 진도표 렌더 — 요일 행 × 학급 열, 즉시 편집·저장
 function renderProgress() {
   const list = $("progress-list");
   if (!list) return;
-  if (!$("progress-date").value) $("progress-date").value = todayStr();
+  ensureWeek();
 
   const classes = timetableClasses();
+  const total = Object.values(progress).reduce((n, arr) => n + arr.length, 0);
+  $("progress-count").textContent = total ? `총 ${total}건` : "";
+
+  // 주 라벨
+  const days = [0, 1, 2, 3, 4].map((i) => ymdAdd(progWeekStart, i));
+  const fmt = (ds) => { const [, m, d] = ds.split("-").map(Number); return `${m}/${d}`; };
+  const wkEl = $("prog-week");
+  if (wkEl) wkEl.textContent = `${fmt(days[0])} ~ ${fmt(days[4])}`;
+
   if (!classes.length) {
-    $("progress-count").textContent = "";
-    list.innerHTML = '<p class="muted" style="text-align:center; padding: 18px;">시간표에 수업(학급)을 먼저 입력하면 여기서 진도를 기록할 수 있어요.</p>';
-    return;
-  }
-
-  // 모든 기록 날짜 + 임시로 추가한 날짜 → 오름차순(과거 → 최근)
-  const dateSet = new Set(progressDraftDates);
-  let total = 0;
-  for (const c of classes) for (const r of (progress[c] || [])) { dateSet.add(r.date); total++; }
-  const dates = [...dateSet].sort();
-
-  $("progress-count").textContent = total ? `${total}건` : "";
-  if (!dates.length) {
-    list.innerHTML = '<p class="muted" style="text-align:center; padding: 18px;">위에서 <b>수업일</b>을 추가하면 날짜별로 진도를 적을 수 있어요.</p>';
+    list.innerHTML = '<p class="muted" style="text-align:center; padding: 18px;">시간표(컴시간)에서 담당 학급을 불러오는 중이거나, 담당 수업이 없습니다.<br>설정에서 \'내 이름\'을 확인해 주세요.</p>';
     return;
   }
 
   const wdName = (ds) => { const [y, m, d] = ds.split("-").map(Number); return "일월화수목금토"[new Date(y, m - 1, d).getDay()]; };
-  let html = '<table class="progress-matrix"><thead><tr><th class="pm-date-h">날짜</th>';
+  const today = todayStr();
+  let html = '<table class="progress-matrix"><thead><tr><th class="pm-date-h">요일</th>';
   for (const c of classes) html += `<th>${escapeHtml(c)}</th>`;
   html += "</tr></thead><tbody>";
-  for (const ds of dates) {
-    const [y, m, d] = ds.split("-").map(Number);
-    html += `<tr><td class="pm-date">${m}/${d}<span class="pm-wd">(${wdName(ds)})</span></td>`;
+  for (const ds of days) {
+    const [, m, d] = ds.split("-").map(Number);
+    const isToday = ds === today;
+    html += `<tr class="${isToday ? "pm-today" : ""}"><td class="pm-date"><b>${wdName(ds)}</b><span class="pm-wd">${m}/${d}</span></td>`;
     for (const c of classes) {
       const rec = progressCell(c, ds);
       html += `<td><textarea class="progress-cell" data-cls="${escapeHtml(c)}" data-date="${ds}" data-pid="${rec ? rec.id : ""}" rows="1" placeholder="–">${rec ? escapeHtml(rec.content) : ""}</textarea></td>`;
@@ -1771,18 +1782,8 @@ function renderProgress() {
   // 내용에 맞춰 칸 높이 자동
   list.querySelectorAll(".progress-cell").forEach((ta) => {
     ta.style.height = "auto";
-    ta.style.height = Math.max(34, ta.scrollHeight) + "px";
+    ta.style.height = Math.max(40, ta.scrollHeight) + "px";
   });
-}
-
-// 수업일(빈 행) 추가
-function addProgressDate() {
-  const date = $("progress-date").value || todayStr();
-  progressDraftDates.add(date);
-  renderProgress();
-  // 방금 추가한 날짜의 첫 학급 칸에 포커스
-  const first = $("progress-list").querySelector(`.progress-cell[data-date="${date}"]`);
-  if (first) first.focus();
 }
 
 // 칸 편집 저장: 있으면 수정/삭제, 없으면 생성
@@ -3293,8 +3294,10 @@ function bindEventsNew() {
     toast("시간표가 저장되었습니다");
   });
 
-  // 수업진도표 (날짜 × 학급 매트릭스)
-  $("progress-adddate-btn")?.addEventListener("click", addProgressDate);
+  // 수업진도표 (주간 매트릭스)
+  $("prog-prev")?.addEventListener("click", () => shiftProgWeek(-1));
+  $("prog-next")?.addEventListener("click", () => shiftProgWeek(1));
+  $("prog-thisweek")?.addEventListener("click", thisProgWeek);
   $("progress-export-btn")?.addEventListener("click", exportProgress);
   // 칸 편집 저장 (blur 시)
   $("progress-list")?.addEventListener("focusout", (e) => {
