@@ -3294,6 +3294,15 @@ function bindEventsNew() {
     toast("시간표가 저장되었습니다");
   });
 
+  // 시간표 뷰어 새로고침 (iframe + 컴시간 데이터 최신화)
+  $("tt-reload")?.addEventListener("click", () => {
+    const fr = $("tt-frame");
+    const theme = document.documentElement.getAttribute("data-theme") || "light";
+    if (fr) fr.src = `${COMCI_BASE}/?theme=${theme}&t=${Date.now()}`;
+    loadComci(true);
+    toast("시간표를 최신으로 불러왔습니다");
+  });
+
   // 수업진도표 (주간 매트릭스)
   $("prog-prev")?.addEventListener("click", () => shiftProgWeek(-1));
   $("prog-next")?.addEventListener("click", () => shiftProgWeek(1));

@@ -91,7 +91,10 @@
         <div class="panel tt-embed-panel">
           <div class="panel-head">
             <h2>시간표 <span class="muted" style="font-weight:400; font-size:0.8rem;">컴시간 자동 연동</span></h2>
-            <a href="https://woorimalsam-lab.github.io/timetable/" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">새 탭 ↗</a>
+            <div style="display:flex; gap:6px;">
+              <button id="tt-reload" class="btn btn-ghost btn-sm" title="최신 시간표 다시 불러오기">↻ 새로고침</button>
+              <a href="https://woorimalsam-lab.github.io/timetable/" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">새 탭 ↗</a>
+            </div>
           </div>
           <div class="tt-frame-wrap">
             <iframe id="tt-frame" class="tt-frame" title="교사 시간표 뷰어" loading="lazy"></iframe>
