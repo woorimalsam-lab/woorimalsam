@@ -2373,7 +2373,7 @@ async function exportYearAggregate() {
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   if (!total) { toast(`${year}년에 취합할 데이터가 없습니다`); return; }
-  XLSX.writeFile(wb, `${(state.settings.school || "우리말샘핀")}_${year}년_전체데이터.xlsx`);
+  XLSX.writeFile(wb, `${(state.settings.school || "김수연샘핀")}_${year}년_전체데이터.xlsx`);
   renderAggSummary(year, counts);
   toast(`📊 ${year}년 데이터 ${total}건을 엑셀로 취합했습니다`);
 }
