@@ -992,6 +992,35 @@ body {
 }
 .student-num { color: var(--primary); font-weight: 700; }
 
+/* ---------- 도구: 돌림판 / 소음계 / 시계 / 신호등 / 화이트보드 ---------- */
+.wheel-stage { position: relative; width: 220px; max-width: 100%; margin: 10px auto; }
+.wheel-svg { width: 100%; display: block; }
+.wheel-pointer { position: absolute; top: -4px; left: 50%; transform: translateX(-50%); font-size: 1.4rem; color: var(--danger); z-index: 2; line-height: 1; }
+.wheel-result { font-size: 1.05rem; }
+.wheel-result b { color: var(--primary); }
+
+.noise-meter { margin-bottom: 12px; }
+.noise-bar { height: 26px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
+.noise-fill { display: block; height: 100%; width: 0%; background: #1c9963; border-radius: 999px; transition: width 0.1s linear, background 0.2s; }
+.noise-val { text-align: center; font-weight: 700; margin-top: 8px; font-size: 1rem; }
+
+.clock-time { font-size: 3rem; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; color: var(--primary); letter-spacing: 2px; }
+.clock-date { text-align: center; margin-top: 4px; }
+
+.signal-lights { display: flex; justify-content: center; gap: 14px; margin: 6px 0 12px; }
+.signal-light { width: 52px; height: 52px; border-radius: 50%; border: 3px solid var(--line); cursor: pointer; opacity: 0.32; transition: opacity 0.15s, transform 0.15s; }
+.signal-light.red { background: #e5484d; } .signal-light.yellow { background: #e0a41e; } .signal-light.green { background: #1c9963; }
+.signal-light.active { opacity: 1; transform: scale(1.12); box-shadow: 0 0 0 4px var(--accent-soft); }
+.signal-label { text-align: center; font-weight: 700; font-size: 1rem; }
+
+.wb-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.wb-toolbar label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.wb-toolbar input[type="color"] { width: 36px; height: 32px; border: 1px solid var(--line); border-radius: 6px; padding: 0; cursor: pointer; }
+.wb-canvas { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; touch-action: none; cursor: crosshair; }
+
+[data-theme="dark"] .noise-bar { background: #262c3a; }
+[data-theme="dark"] .signal-light { border-color: #3a4150; }
+
 /* ---------- 도구: 발표자 뽑기 / 모둠 편성 / 점수판 ---------- */
 .tool-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .tool-row select { flex: 1; min-width: 90px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); }

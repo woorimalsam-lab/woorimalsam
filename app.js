@@ -1353,6 +1353,7 @@ function setView(name) {
   if (name === "calendar") { renderCalendar(); if (state.selected) renderDayDetail(); }
   if (name === "memo") renderMemos();
   if (name === "tools") renderToolClassSelects();
+  else if (typeof stopNoise === "function" && noiseStream) stopNoise();   // 도구 벗어나면 마이크 해제
 
   window.scrollTo(0, 0);
 }
@@ -2526,6 +2527,163 @@ function pickNumber() {
   $("numberpick-result").innerHTML = `<div style="font-size: 3rem; font-weight: 700; color: var(--primary); text-align: center; padding: 30px;">${picked}</div>`;
   toast(`🎯 ${picked}번이 선택되었습니다`);
 }
+
+// ============================================================
+//  도구 — 돌림판 / 소음 측정기 / 시계 / 신호등 / 화이트보드
+//  (i-Scream 툴킷 참고 보강)
+// ============================================================
+const WHEEL_COLORS = ["#3b6ef5", "#1c9963", "#e08a1e", "#e5484d", "#8b5cf6", "#0d9488", "#d6409f", "#64748b"];
+let wheelItems = [], wheelRotation = 0, wheelSpinning = false;
+
+function polarXY(cx, cy, r, deg) {
+  const rad = (deg * Math.PI) / 180;
+  return [cx + r * Math.sin(rad), cy - r * Math.cos(rad)];
+}
+function parseWheelItems() {
+  const cls = toolStudents("wheel-grade", "wheel-class");
+  const manual = $("wheel-items").value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
+  if (manual.length) return manual;
+  return cls.map((s) => `${s.number ? s.number + " " : ""}${s.name}`);
+}
+function drawWheel() {
+  const svg = $("wheel-svg");
+  if (!svg) return;
+  wheelItems = parseWheelItems();
+  const n = wheelItems.length;
+  if (!n) { svg.innerHTML = '<text x="100" y="105" text-anchor="middle" fill="#9aa3b2" font-size="12">항목을 입력하세요</text>'; return; }
+  const slice = 360 / n;
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    const a0 = i * slice, a1 = (i + 1) * slice;
+    const [x0, y0] = polarXY(100, 100, 95, a0);
+    const [x1, y1] = polarXY(100, 100, 95, a1);
+    const large = slice > 180 ? 1 : 0;
+    html += `<path d="M100 100 L${x0.toFixed(1)} ${y0.toFixed(1)} A95 95 0 ${large} 1 ${x1.toFixed(1)} ${y1.toFixed(1)} Z" fill="${WHEEL_COLORS[i % WHEEL_COLORS.length]}"/>`;
+    const [tx, ty] = polarXY(100, 100, 62, a0 + slice / 2);
+    const label = wheelItems[i].length > 6 ? wheelItems[i].slice(0, 6) + "…" : wheelItems[i];
+    html += `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="9" font-weight="700" transform="rotate(${(a0 + slice / 2).toFixed(1)} ${tx.toFixed(1)} ${ty.toFixed(1)})">${escapeHtml(label)}</text>`;
+  }
+  html += '<circle cx="100" cy="100" r="10" fill="#fff" stroke="#d9dde3"/>';
+  svg.innerHTML = html;
+  svg.style.transform = `rotate(${wheelRotation}deg)`;
+}
+function spinWheel() {
+  if (wheelSpinning) return;
+  const n = wheelItems.length;
+  if (!n) { toast("항목을 입력하세요"); return; }
+  const slice = 360 / n;
+  const idx = Math.floor(Math.random() * n);
+  const targetMod = (360 - (idx * slice + slice / 2)) % 360;
+  const cur = ((wheelRotation % 360) + 360) % 360;
+  wheelRotation += 360 * 6 + ((targetMod - cur + 360) % 360);
+  const svg = $("wheel-svg");
+  svg.style.transition = "transform 3.6s cubic-bezier(.17,.67,.2,1)";
+  svg.style.transform = `rotate(${wheelRotation}deg)`;
+  wheelSpinning = true;
+  $("wheel-result").textContent = "";
+  setTimeout(() => {
+    wheelSpinning = false;
+    $("wheel-result").innerHTML = `🎯 <b>${escapeHtml(wheelItems[idx])}</b>`;
+    toast(`🎡 ${wheelItems[idx]}`);
+  }, 3700);
+}
+
+// ---------- 소음 측정기 ----------
+let noiseCtx = null, noiseAnalyser = null, noiseStream = null, noiseRAF = null;
+async function toggleNoise() {
+  if (noiseStream) { stopNoise(); return; }
+  try {
+    noiseStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    toast("마이크 권한이 필요합니다"); return;
+  }
+  noiseCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = noiseCtx.createMediaStreamSource(noiseStream);
+  noiseAnalyser = noiseCtx.createAnalyser();
+  noiseAnalyser.fftSize = 512;
+  src.connect(noiseAnalyser);
+  $("noise-toggle").textContent = "측정 중지";
+  const buf = new Uint8Array(noiseAnalyser.fftSize);
+  const tick = () => {
+    noiseAnalyser.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+    const rms = Math.sqrt(sum / buf.length);
+    const level = Math.min(100, Math.round(rms * 300));
+    const fill = $("noise-fill"), val = $("noise-val");
+    if (fill) {
+      fill.style.width = level + "%";
+      fill.style.background = level < 33 ? "#1c9963" : level < 66 ? "#e08a1e" : "#e5484d";
+    }
+    if (val) val.textContent = level < 33 ? `조용해요 (${level})` : level < 66 ? `보통 (${level})` : `시끄러워요! (${level})`;
+    noiseRAF = requestAnimationFrame(tick);
+  };
+  tick();
+}
+function stopNoise() {
+  if (noiseRAF) cancelAnimationFrame(noiseRAF);
+  if (noiseStream) noiseStream.getTracks().forEach((t) => t.stop());
+  if (noiseCtx) noiseCtx.close();
+  noiseStream = noiseCtx = noiseAnalyser = noiseRAF = null;
+  const btn = $("noise-toggle"); if (btn) btn.textContent = "측정 시작";
+  const fill = $("noise-fill"); if (fill) fill.style.width = "0%";
+  const val = $("noise-val"); if (val) val.textContent = "–";
+}
+
+// ---------- 시계 ----------
+function tickClock() {
+  const t = $("clock-time"), d = $("clock-date");
+  if (!t) return;
+  const now = new Date();
+  t.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  if (d) {
+    const wd = "일월화수목금토"[now.getDay()];
+    d.textContent = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 (${wd})`;
+  }
+}
+
+// ---------- 신호등 ----------
+function setSignal(color) {
+  document.querySelectorAll(".signal-light").forEach((b) => b.classList.toggle("active", b.dataset.signal === color));
+  const label = { green: "🟢 자유롭게 이야기해요", yellow: "🟡 속삭이며 이야기해요", red: "🔴 조용히 집중해요" }[color];
+  const el = $("signal-label"); if (el) el.textContent = label;
+}
+
+// ---------- 화이트보드 ----------
+let wbCtx = null, wbDrawing = false, wbErase = false;
+function initWhiteboard() {
+  const cv = $("wb-canvas");
+  if (!cv || wbCtx) return;
+  wbCtx = cv.getContext("2d");
+  wbCtx.lineCap = "round"; wbCtx.lineJoin = "round";
+  const pos = (e) => {
+    const r = cv.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x: (p.clientX - r.left) * (cv.width / r.width), y: (p.clientY - r.top) * (cv.height / r.height) };
+  };
+  const start = (e) => { wbDrawing = true; const { x, y } = pos(e); wbCtx.beginPath(); wbCtx.moveTo(x, y); e.preventDefault(); };
+  const move = (e) => {
+    if (!wbDrawing) return;
+    const { x, y } = pos(e);
+    wbCtx.strokeStyle = wbErase ? "#ffffff" : $("wb-color").value;
+    wbCtx.lineWidth = wbErase ? 24 : (parseInt($("wb-size").value) || 4);
+    wbCtx.lineTo(x, y); wbCtx.stroke(); e.preventDefault();
+  };
+  const end = () => { wbDrawing = false; };
+  cv.addEventListener("mousedown", start); cv.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", end);
+  cv.addEventListener("touchstart", start, { passive: false });
+  cv.addEventListener("touchmove", move, { passive: false });
+  cv.addEventListener("touchend", end);
+}
+function clearWhiteboard() { const cv = $("wb-canvas"); if (wbCtx) wbCtx.clearRect(0, 0, cv.width, cv.height); }
+function saveWhiteboard() {
+  const cv = $("wb-canvas");
+  // 흰 배경 깔아 저장
+  const tmp = document.createElement("canvas"); tmp.width = cv.width; tmp.height = cv.height;
+  const tc = tmp.getContext("2d"); tc.fillStyle = "#fff"; tc.fillRect(0, 0, tmp.width, tmp.height); tc.drawImage(cv, 0, 0);
+  const a = document.createElement("a"); a.href = tmp.toDataURL("image/png"); a.download = `화이트보드_${todayStr()}.png`; a.click();
+}
 // ============================================================
 //  도구 — 발표자 뽑기 · 모둠 편성 (학년·학급 선택, 학생 명단 연동)
 // ============================================================
@@ -2570,8 +2728,10 @@ function toolStudents(gradeId, classId) {
 function renderToolClassSelects() {
   fillGradeClassSelects("picker-grade", "picker-class");
   fillGradeClassSelects("group-grade", "group-class");
+  fillGradeClassSelects("wheel-grade", "wheel-class");
   renderGroupRoster();
   renderPickerHistory();
+  drawWheel();
 }
 
 // 발표자 뽑기
@@ -3536,6 +3696,28 @@ function bindEventsNew() {
 
   // 도구 - 번호뽑기
   $("numberpick-btn")?.addEventListener("click", pickNumber);
+
+  // 도구 - 돌림판
+  $("wheel-spin")?.addEventListener("click", spinWheel);
+  $("wheel-items")?.addEventListener("input", drawWheel);
+  $("wheel-grade")?.addEventListener("change", () => { fillGradeClassSelects("wheel-grade", "wheel-class"); $("wheel-items").value = ""; drawWheel(); });
+  $("wheel-class")?.addEventListener("change", () => { $("wheel-items").value = ""; drawWheel(); });
+  // 도구 - 소음 측정기
+  $("noise-toggle")?.addEventListener("click", toggleNoise);
+  // 도구 - 신호등
+  $("signal-lights")?.addEventListener("click", (e) => { const b = e.target.closest(".signal-light"); if (b) setSignal(b.dataset.signal); });
+  // 도구 - 화이트보드
+  initWhiteboard();
+  $("wb-eraser")?.addEventListener("click", () => {
+    wbErase = !wbErase;
+    $("wb-eraser").classList.toggle("btn-primary", wbErase);
+    $("wb-eraser").textContent = wbErase ? "그리기" : "지우개";
+  });
+  $("wb-clear")?.addEventListener("click", clearWhiteboard);
+  $("wb-save")?.addEventListener("click", saveWhiteboard);
+  // 시계 (매초 갱신)
+  tickClock();
+  setInterval(tickClock, 1000);
 
   // 도구 - 토론 타이머
   $("debate-start-btn")?.addEventListener("click", startDebate);

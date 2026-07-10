@@ -447,6 +447,63 @@
           <div id="numberpick-result" class="numberpick-result"></div>
         </div>
 
+        <div class="tool-card">
+          <h3>🎡 돌림판</h3>
+          <div class="tool-row">
+            <select id="wheel-grade" title="학년"></select>
+            <select id="wheel-class" title="학급"></select>
+          </div>
+          <textarea id="wheel-items" rows="2" class="tool-textarea" placeholder="항목을 쉼표나 줄바꿈으로 입력 (학급 선택 시 자동)"></textarea>
+          <div class="wheel-stage">
+            <div class="wheel-pointer">▼</div>
+            <svg id="wheel-svg" viewBox="0 0 200 200" class="wheel-svg"></svg>
+          </div>
+          <div class="tool-row">
+            <button id="wheel-spin" class="btn btn-primary btn-sm">돌리기</button>
+            <span id="wheel-result" class="wheel-result"></span>
+          </div>
+        </div>
+
+        <div class="tool-card">
+          <h3>🔊 소음 측정기</h3>
+          <div class="noise-meter">
+            <div id="noise-bar" class="noise-bar"><span id="noise-fill" class="noise-fill"></span></div>
+            <div id="noise-val" class="noise-val">–</div>
+          </div>
+          <div class="tool-row">
+            <button id="noise-toggle" class="btn btn-primary btn-sm">측정 시작</button>
+            <span class="muted" style="font-size:0.78rem;">마이크 권한이 필요합니다</span>
+          </div>
+        </div>
+
+        <div class="tool-card">
+          <h3>🕐 시계</h3>
+          <div id="clock-time" class="clock-time">00:00:00</div>
+          <div id="clock-date" class="clock-date muted"></div>
+        </div>
+
+        <div class="tool-card">
+          <h3>🚦 신호등 <span class="muted" style="font-weight:400;font-size:0.78rem;">정숙 신호</span></h3>
+          <div class="signal-lights" id="signal-lights">
+            <button class="signal-light red" data-signal="red" title="조용히"></button>
+            <button class="signal-light yellow" data-signal="yellow" title="속삭이기"></button>
+            <button class="signal-light green active" data-signal="green" title="자유롭게"></button>
+          </div>
+          <div id="signal-label" class="signal-label">🟢 자유롭게 이야기해요</div>
+        </div>
+
+        <div class="tool-card tool-card-wide">
+          <h3>🎨 화이트보드</h3>
+          <div class="wb-toolbar">
+            <input id="wb-color" type="color" value="#e5484d" title="색" />
+            <label>굵기 <input id="wb-size" type="range" min="1" max="24" value="4" /></label>
+            <button id="wb-eraser" class="btn btn-ghost btn-sm">지우개</button>
+            <button id="wb-clear" class="btn btn-ghost btn-sm">전체 지우기</button>
+            <button id="wb-save" class="btn btn-ghost btn-sm">📥 이미지 저장</button>
+          </div>
+          <canvas id="wb-canvas" class="wb-canvas" width="900" height="360"></canvas>
+        </div>
+
       </div>
     </section>
 
