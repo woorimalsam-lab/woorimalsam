@@ -978,6 +978,7 @@ async function initFirebase() {
       refreshEvents();
     }
     if (state.activeView === "home") renderDashboard();
+    if (state.activeView === "settings") renderSyncStatus();
   });
 
   // 리디렉션 로그인으로 돌아온 경우 환영 메시지
@@ -1358,6 +1359,77 @@ function unsubscribeState() {
   while (stateUnsubs.length) { try { stateUnsubs.pop()(); } catch (e) {} }
 }
 
+// ---------- 설정: 동기화 상태 표시 / 수동 올리기·받기 ----------
+const SYNC_LABELS = {
+  students: "학생 명단", seating: "자리배치", attendance: "출결",
+  observations: "학생관찰", progress: "수업진도", picklog: "뽑기 기록",
+  settings: "설정", memocats: "메모 항목",
+};
+function countOf(d) {
+  if (!d) return 0;
+  return Array.isArray(d) ? d.length : Object.keys(d).length;
+}
+function renderSyncStatus(detail) {
+  const box = $("sync-status");
+  if (!box) return;
+  if (!isConfigured) {
+    box.innerHTML = '<span class="sync-badge off">동기화 꺼짐</span> Firebase 설정이 없습니다.';
+  } else if (state.synced && state.user) {
+    const who = state.user.email || state.user.displayName || "";
+    box.innerHTML = `<span class="sync-badge on">동기화 중</span> ${escapeHtml(who)}`;
+  } else {
+    box.innerHTML = '<span class="sync-badge off">로그인 필요</span> 오른쪽 위 <b>구글 로그인</b>을 눌러 주세요. 두 기기 모두 같은 계정으로 로그인해야 합니다.';
+  }
+  const det = $("sync-detail");
+  if (det) {
+    if (detail) det.textContent = detail;
+    else {
+      const reg = syncRegistry();
+      det.textContent = "이 기기: " + Object.keys(reg)
+        .map((k) => `${SYNC_LABELS[k] || k} ${countOf(reg[k].get())}`).join(" · ");
+    }
+  }
+}
+// 이 기기 내용을 클라우드로 전부 올리기
+async function syncPushAll() {
+  if (!(state.synced && fb)) { toast("먼저 구글 로그인을 해주세요"); return; }
+  const reg = syncRegistry();
+  const { doc, setDoc, serverTimestamp } = fb.fs;
+  let n = 0;
+  for (const key of Object.keys(reg)) {
+    const data = reg[key].get();
+    if (!countOf(data)) continue;
+    try {
+      await setDoc(doc(fb.db, "users", state.user.uid, "state", key), { json: JSON.stringify(data), at: serverTimestamp() });
+      n++;
+    } catch (e) { console.error("올리기 실패:", key, e); }
+  }
+  renderSyncStatus(`⬆️ ${n}개 항목을 클라우드로 올렸습니다. 다른 기기에서 '클라우드에서 받기'를 누르세요.`);
+  toast(`⬆️ ${n}개 항목을 올렸습니다`);
+}
+// 클라우드 내용을 이 기기로 전부 받기
+async function syncPullAll() {
+  if (!(state.synced && fb)) { toast("먼저 구글 로그인을 해주세요"); return; }
+  const reg = syncRegistry();
+  const { doc, getDoc } = fb.fs;
+  let n = 0, empty = [];
+  for (const key of Object.keys(reg)) {
+    try {
+      const snap = await getDoc(doc(fb.db, "users", state.user.uid, "state", key));
+      if (snap.exists() && snap.data().json != null) {
+        const d = JSON.parse(snap.data().json);
+        applyingRemote = true;
+        try { reg[key].set(d); saveLocal(reg[key].lk, d); } finally { applyingRemote = false; }
+        n++;
+      } else empty.push(SYNC_LABELS[key] || key);
+    } catch (e) { console.error("받기 실패:", key, e); }
+  }
+  renderSyncStatus(n
+    ? `⬇️ ${n}개 항목을 받았습니다.${empty.length ? " (클라우드에 없음: " + empty.join(", ") + ")" : ""}`
+    : "클라우드에 저장된 내용이 없습니다. 다른 기기에서 먼저 '이 기기 내용 올리기'를 눌러 주세요.");
+  toast(n ? `⬇️ ${n}개 항목을 받았습니다` : "클라우드에 내용이 없습니다");
+}
+
 function renderTodos() {
   const ul = $("todo-list");
   if (!ul) return;
@@ -1417,6 +1489,7 @@ function setView(name) {
     loadSettings();
     fillAggYear();
     renderAggSummary($("agg-year")?.value);
+    renderSyncStatus();
   }
   if (name === "calendar") { renderCalendar(); if (state.selected) renderDayDetail(); }
   if (name === "memo") renderMemos();
@@ -3708,6 +3781,9 @@ function bindEventsNew() {
 
   // 설정
   $("save-settings-btn")?.addEventListener("click", saveSettings);
+  // 동기화 수동 올리기·받기
+  $("sync-push-btn")?.addEventListener("click", syncPushAll);
+  $("sync-pull-btn")?.addEventListener("click", syncPullAll);
   // 테마 즉시 전환 + 저장
   $("setting-theme")?.addEventListener("change", (e) => {
     const t = e.target.value === "dark" ? "dark" : "light";

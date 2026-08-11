@@ -515,6 +515,17 @@
         </div>
 
         <div class="settings-section">
+          <h3>기기 간 동기화</h3>
+          <div id="sync-status" class="sync-status"></div>
+          <p class="setting-hint">학생 명단·자리배치·출결·학생관찰·수업진도·설정을 같은 구글 계정의 다른 기기와 공유합니다.</p>
+          <div class="setting-btn-row">
+            <button id="sync-push-btn" class="btn btn-primary btn-sm">⬆️ 이 기기 내용 올리기</button>
+            <button id="sync-pull-btn" class="btn btn-ghost btn-sm">⬇️ 클라우드에서 받기</button>
+          </div>
+          <div id="sync-detail" class="sync-detail muted"></div>
+        </div>
+
+        <div class="settings-section">
           <h3>기본 정보</h3>
           <label>학교명: <input id="setting-school" type="text" placeholder="학교명" /></label>
           <label>학년/반: <input id="setting-grade" type="text" placeholder="예: 3-1" /></label>
