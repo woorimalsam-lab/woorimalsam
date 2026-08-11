@@ -43,18 +43,17 @@ body {
 /* ---------- Tab bar (홈/달력/메모) ---------- */
 .tabbar {
   position: sticky; top: 0; z-index: 10;
-  display: flex; gap: 4px;
+  display: flex; flex-wrap: wrap; gap: 4px;
   padding: 6px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
-  overflow-x: auto;
 }
 .navbtn {
   flex: 0 0 auto;
   display: inline-flex; align-items: center; gap: 6px;
   border: none; background: transparent; cursor: pointer;
   font-family: inherit; font-size: 0.92rem; font-weight: 600;
-  color: var(--muted); padding: 9px 18px; border-radius: 10px;
+  color: var(--muted); padding: 9px 16px; border-radius: 10px;
   transition: background 0.12s ease, color 0.12s ease;
 }
 .navbtn:hover { background: var(--accent-soft); color: var(--ink); }
@@ -1242,8 +1241,8 @@ body {
 
 /* 모바일 확장 탭 */
 @media (max-width: 640px) {
-  .tabbar { padding: 5px 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .navbtn { padding: 7px 12px; font-size: 0.8rem; }
+  .tabbar { padding: 5px 8px; justify-content: center; }
+  .navbtn { padding: 7px 11px; font-size: 0.82rem; }
   .navicon { display: none; }
   .tools-grid { grid-template-columns: 1fr; }
   .timetable-grid th, .timetable-grid td { padding: 8px 4px; font-size: 0.72rem; height: 48px; }
