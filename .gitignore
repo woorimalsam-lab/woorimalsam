@@ -8,3 +8,7 @@ Thumbs.db
 *명렬표*
 *.pdf
 
+
+# git 유지보수 임시
+.git-rewrite/
+.claude/
