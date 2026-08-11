@@ -453,6 +453,7 @@ function persistMemoCats() {
   // 기본 항목을 제외한 사용자 추가 항목만 저장
   const extra = state.memoCats.filter((c) => !DEFAULT_MEMO_CATS.includes(c));
   localStorage.setItem(LOCAL_MEMOCATS_KEY, JSON.stringify(extra));
+  cloudSet("memocats", extra);
 }
 function rebuildMemoCats() {
   const fromMemos = state.memos.map((m) => m.category).filter((c) => c && c !== UNCAT);
@@ -955,6 +956,7 @@ async function initFirebase() {
       subscribeMemos();
       subscribeEvents();
       subscribeTodos();
+      subscribeState();   // 학생·자리배치·출결·관찰·진도·설정 기기 간 동기화
       refreshEvents();
       // 로그인/세션복원 어느 경우든, 이 기기의 로컬 데이터가 있으면 1회 업로드 제안
       if (!migrationChecked) {
@@ -970,6 +972,7 @@ async function initFirebase() {
       if (memoUnsub) { memoUnsub(); memoUnsub = null; }
       if (eventsUnsub) { eventsUnsub(); eventsUnsub = null; }
       if (todosUnsub) { todosUnsub(); todosUnsub = null; }
+      unsubscribeState();
       subscribeMemos();   // 로컬 메모로 폴백
       subscribeTodos();
       refreshEvents();
@@ -1288,6 +1291,71 @@ function subscribeTodos() {
       .sort((a, b) => (a.done - b.done) || (b.createdAt - a.createdAt));
     renderTodos();
   });
+}
+
+// ============================================================
+//  기기 간 동기화 — 블롭 상태(학생·자리배치·출결·학생관찰·진도·설정 등)
+//  users/{uid}/state/{key} 문서에 JSON 문자열로 저장 (마지막 저장 우선)
+//  자리배치 grids가 중첩 배열이라 JSON 문자열로 저장해 타입 제약 회피
+// ============================================================
+const stateUnsubs = [];
+let applyingRemote = false;   // 원격 데이터 적용 중엔 재업로드 방지
+
+function syncRegistry() {
+  return {
+    students:     { lk: LOCAL_STUDENTS_KEY, get: () => state.students,
+      set: (d) => { state.students = Array.isArray(d) ? d : []; if (state.activeView === "students") renderStudents(); if (state.activeView === "seating") renderSeating(); } },
+    seating:      { lk: LOCAL_SEATING_KEY, get: () => state.seating,
+      set: (d) => { if (d && d.grids) state.seating = d; if (state.activeView === "seating") renderSeating(); } },
+    attendance:   { lk: LOCAL_ATTENDANCE_KEY, get: () => attendance,
+      set: (d) => { attendance = (d && !Array.isArray(d)) ? d : {}; if (state.activeView === "attendance") renderAttendance(); } },
+    observations: { lk: LOCAL_OBS_KEY, get: () => observations,
+      set: (d) => { observations = (d && !Array.isArray(d)) ? d : {}; if (state.activeView === "observe") renderObservations(); } },
+    progress:     { lk: LOCAL_PROGRESS_KEY, get: () => progress,
+      set: (d) => { progress = (d && !Array.isArray(d)) ? d : {}; if (state.activeView === "timetable") renderProgress(); } },
+    picklog:      { lk: LOCAL_PICKLOG_KEY, get: () => pickLog,
+      set: (d) => { pickLog = (d && !Array.isArray(d)) ? d : {}; if (state.activeView === "tools") renderPickerHistory(); } },
+    settings:     { lk: LOCAL_SETTINGS_KEY, get: () => state.settings,
+      set: (d) => { if (d && !Array.isArray(d)) { state.settings = d; if (state.activeView === "settings") loadSettings(); renderDashboard(); loadComci(true); } } },
+    memocats:     { lk: LOCAL_MEMOCATS_KEY, get: () => loadLocal(LOCAL_MEMOCATS_KEY),
+      set: (d) => { if (Array.isArray(d)) { saveLocal(LOCAL_MEMOCATS_KEY, d); rebuildMemoCats(); if (state.activeView === "memo") renderMemos(); } } },
+  };
+}
+
+// 로컬 변경을 클라우드로 (해당 키 문서 덮어쓰기)
+function cloudSet(key, data) {
+  if (!(state.synced && fb) || applyingRemote) return;
+  try {
+    const { doc, setDoc, serverTimestamp } = fb.fs;
+    setDoc(doc(fb.db, "users", state.user.uid, "state", key), { json: JSON.stringify(data), at: serverTimestamp() });
+  } catch (e) { console.error("클라우드 저장 실패:", key, e); }
+}
+
+// 로그인 시 모든 블롭 상태 구독 (없으면 이 기기 데이터로 시드)
+function subscribeState() {
+  while (stateUnsubs.length) { try { stateUnsubs.pop()(); } catch (e) {} }
+  if (!(state.synced && fb)) return;
+  const { doc, onSnapshot } = fb.fs;
+  const reg = syncRegistry();
+  for (const key of Object.keys(reg)) {
+    const r = reg[key];
+    const ref = doc(fb.db, "users", state.user.uid, "state", key);
+    const unsub = onSnapshot(ref, (snap) => {
+      if (snap.exists() && snap.data().json != null) {
+        let d; try { d = JSON.parse(snap.data().json); } catch (e) { return; }
+        applyingRemote = true;
+        try { r.set(d); saveLocal(r.lk, d); } finally { applyingRemote = false; }
+      } else {
+        // 클라우드에 아직 없으면 이 기기 데이터로 최초 업로드
+        const local = r.get();
+        if (local && (Array.isArray(local) ? local.length : Object.keys(local).length)) cloudSet(key, local);
+      }
+    }, (err) => console.error("상태 구독 오류:", key, err));
+    stateUnsubs.push(unsub);
+  }
+}
+function unsubscribeState() {
+  while (stateUnsubs.length) { try { stateUnsubs.pop()(); } catch (e) {} }
 }
 
 function renderTodos() {
@@ -1712,6 +1780,7 @@ function loadProgress() {
 }
 function saveProgress() {
   saveLocal(LOCAL_PROGRESS_KEY, progress);
+  cloudSet("progress", progress);
 }
 // 진도표 학급 열: 내 시간표(컴시간)에서 담당 학급 + 이미 기록이 있는 학급
 function timetableClasses() {
@@ -1857,6 +1926,7 @@ function loadSeating() {
 }
 function saveSeating() {
   saveLocal(LOCAL_SEATING_KEY, state.seating);
+  cloudSet("seating", state.seating);
 }
 // 현재 학급의 grid 키: "학년|반"
 function seatKey() {
@@ -2015,6 +2085,7 @@ function loadStudents() {
 }
 function saveStudents() {
   saveLocal(LOCAL_STUDENTS_KEY, state.students);
+  cloudSet("students", state.students);
 }
 function addStudent() {
   const name = $("student-name")?.value?.trim();
@@ -2263,6 +2334,7 @@ function saveSettings() {
     home: $("setting-home") ? $("setting-home").value : "home",
   };
   saveLocal(LOCAL_SETTINGS_KEY, state.settings);
+  cloudSet("settings", state.settings);
   renderDashboard();     // 인사말에 즉시 반영
   loadComci(true);       // 교사명 변경 시 내 수업 다시 매칭
   toast("설정이 저장되었습니다.");
@@ -2744,6 +2816,7 @@ function loadPickLog() {
 }
 function savePickLog() {
   saveLocal(LOCAL_PICKLOG_KEY, pickLog);
+  cloudSet("picklog", pickLog);
 }
 function pickerKey() {
   return `${$("picker-grade")?.value ?? ""}-${$("picker-class")?.value ?? ""}`;
@@ -2851,6 +2924,7 @@ function loadAttendance() {
 }
 function saveAttendance() {
   saveLocal(LOCAL_ATTENDANCE_KEY, attendance);
+  cloudSet("attendance", attendance);
   schedulePublishAttendance();
 }
 
@@ -3073,6 +3147,7 @@ function loadObservations() {
 }
 function saveObservations() {
   saveLocal(LOCAL_OBS_KEY, observations);
+  cloudSet("observations", observations);
 }
 
 // 학생 선택 드롭다운 채우기 (선택 유지, 기록 건수 표시)
