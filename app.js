@@ -1494,7 +1494,7 @@ function setView(name) {
   if (name === "calendar") { renderCalendar(); if (state.selected) renderDayDetail(); }
   if (name === "memo") renderMemos();
   if (name === "tools") renderToolClassSelects();
-  else { if (noiseStream) stopNoise(); stopAlarm(); }   // 도구 벗어나면 마이크·알람 정리
+  else { if (noiseStream) stopNoise(); stopAlarm(); stopVoiceTool(); }   // 도구 벗어나면 마이크·알람 정리
 
   window.scrollTo(0, 0);
 }
@@ -2792,6 +2792,175 @@ function stopNoise() {
   const val = $("noise-val"); if (val) val.textContent = "–";
 }
 
+// ---------- 음성 녹음 · 변조 ----------
+let recStream = null, recorder = null, recChunks = [], recBuffer = null;
+let recTimer = null, recStartAt = 0, recSource = null;
+
+function recSetStatus(msg) { const el = $("rec-status"); if (el) el.textContent = msg; }
+function recSetInfo(msg) { const el = $("rec-info"); if (el) el.textContent = msg; }
+function recUpdateButtons(ready) {
+  const play = $("rec-play"), save = $("rec-save");
+  if (play) play.disabled = !ready;
+  if (save) save.disabled = !ready;
+}
+
+async function toggleRecord() {
+  if (recorder && recorder.state === "recording") { stopRecord(); return; }
+  try {
+    recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    toast("마이크 권한이 필요합니다"); recSetStatus("마이크 권한이 거부되었습니다"); return;
+  }
+  recChunks = [];
+  try {
+    recorder = new MediaRecorder(recStream);
+  } catch (e) {
+    toast("이 브라우저는 녹음을 지원하지 않습니다"); stopRecordStream(); return;
+  }
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+  recorder.onstop = async () => {
+    stopRecordStream();
+    try {
+      const blob = new Blob(recChunks, { type: recorder.mimeType || "audio/webm" });
+      const buf = await blob.arrayBuffer();
+      const ctx = getAudioCtx();
+      recBuffer = await ctx.decodeAudioData(buf);
+      recUpdateButtons(true);
+      recSetInfo(`녹음 완료 · ${recBuffer.duration.toFixed(1)}초 — 변조를 골라 재생해 보세요.`);
+    } catch (e) {
+      console.error("녹음 처리 실패", e);
+      recSetInfo("녹음을 처리하지 못했습니다. 다시 시도해 주세요.");
+    }
+  };
+  recorder.start();
+  recStartAt = Date.now();
+  $("rec-toggle").textContent = "■ 녹음 정지";
+  $("rec-toggle").classList.add("btn-danger");
+  recSetStatus("● 녹음 중… 0.0초");
+  recTimer = setInterval(() => {
+    const sec = (Date.now() - recStartAt) / 1000;
+    recSetStatus(`● 녹음 중… ${sec.toFixed(1)}초`);
+    if (sec >= 60) stopRecord();   // 최대 60초
+  }, 100);
+}
+function stopRecord() {
+  const wasRecording = !!(recorder && recorder.state === "recording");
+  if (recTimer) { clearInterval(recTimer); recTimer = null; }
+  if (wasRecording) recorder.stop();
+  const btn = $("rec-toggle");
+  if (btn) { btn.textContent = "● 녹음 시작"; btn.classList.remove("btn-danger"); }
+  if (wasRecording) recSetStatus("녹음을 마쳤습니다");   // 녹음 중이 아니었으면 안내 문구 유지
+}
+function stopRecordStream() {
+  if (recStream) { recStream.getTracks().forEach((t) => t.stop()); recStream = null; }
+}
+
+// 변조 그래프 구성 (실시간 재생·파일 저장 공용)
+function buildVoiceGraph(ctx, buffer, effect) {
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  let node = src;
+  if (effect === "high") src.playbackRate.value = 1.5;      // 다람쥐
+  if (effect === "low") src.playbackRate.value = 0.72;      // 괴물
+  if (effect === "robot") {                                  // 링 모듈레이션
+    const rm = ctx.createGain();
+    rm.gain.value = 0;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = 50;
+    osc.connect(rm.gain);
+    node.connect(rm);
+    node = rm;
+    osc.start();
+  }
+  if (effect === "echo") {                                   // 동굴 에코
+    const delay = ctx.createDelay(1.0);
+    delay.delayTime.value = 0.18;
+    const fb = ctx.createGain();
+    fb.gain.value = 0.38;
+    const mix = ctx.createGain();
+    node.connect(mix);
+    node.connect(delay);
+    delay.connect(fb); fb.connect(delay);
+    delay.connect(mix);
+    node = mix;
+  }
+  node.connect(ctx.destination);
+  return src;
+}
+function currentEffect() { return $("rec-effect")?.value || "none"; }
+function effectDuration(effect) {
+  if (!recBuffer) return 0;
+  const rate = effect === "high" ? 1.5 : effect === "low" ? 0.72 : 1;
+  return recBuffer.duration / rate + (effect === "echo" ? 1.2 : 0.1);
+}
+
+function playRecording() {
+  if (!recBuffer) return;
+  const ctx = getAudioCtx();
+  if (!ctx) { toast("이 브라우저에서 재생할 수 없습니다"); return; }
+  if (recSource) { try { recSource.stop(); } catch (e) {} recSource = null; }
+  recSource = buildVoiceGraph(ctx, recBuffer, currentEffect());
+  recSource.start();
+  recSetInfo("▶ 재생 중…");
+  recSource.onended = () => recSetInfo(`녹음 ${recBuffer.duration.toFixed(1)}초 · 변조를 바꿔 다시 들어보세요.`);
+}
+
+// AudioBuffer → WAV(16bit) 파일
+function bufferToWav(buffer) {
+  const numCh = buffer.numberOfChannels, len = buffer.length;
+  const out = new ArrayBuffer(44 + len * numCh * 2);
+  const view = new DataView(out);
+  const ws = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+  ws(0, "RIFF"); view.setUint32(4, 36 + len * numCh * 2, true); ws(8, "WAVE");
+  ws(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, numCh, true); view.setUint32(24, buffer.sampleRate, true);
+  view.setUint32(28, buffer.sampleRate * numCh * 2, true); view.setUint16(32, numCh * 2, true);
+  view.setUint16(34, 16, true);
+  ws(36, "data"); view.setUint32(40, len * numCh * 2, true);
+  const chans = [];
+  for (let c = 0; c < numCh; c++) chans.push(buffer.getChannelData(c));
+  let off = 44;
+  for (let i = 0; i < len; i++) {
+    for (let c = 0; c < numCh; c++) {
+      const v = Math.max(-1, Math.min(1, chans[c][i]));
+      view.setInt16(off, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+      off += 2;
+    }
+  }
+  return new Blob([out], { type: "audio/wav" });
+}
+
+async function saveRecording() {
+  if (!recBuffer) return;
+  const effect = currentEffect();
+  try {
+    const dur = effectDuration(effect);
+    const off = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(
+      recBuffer.numberOfChannels, Math.ceil(dur * recBuffer.sampleRate), recBuffer.sampleRate);
+    const src = buildVoiceGraph(off, recBuffer, effect);
+    src.start();
+    const rendered = await off.startRendering();
+    const blob = bufferToWav(rendered);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `녹음_${effect === "none" ? "원본" : effect}_${todayStr()}.wav`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    toast("📥 음성 파일을 저장했습니다");
+  } catch (e) {
+    console.error("저장 실패", e);
+    toast("저장에 실패했습니다");
+  }
+}
+
+// 도구 화면을 벗어날 때 정리
+function stopVoiceTool() {
+  stopRecord();
+  stopRecordStream();
+  if (recSource) { try { recSource.stop(); } catch (e) {} recSource = null; }
+}
+
 // ---------- 시계 ----------
 function tickClock() {
   const t = $("clock-time"), d = $("clock-date");
@@ -3915,6 +4084,11 @@ function bindEventsNew() {
   $("wheel-class")?.addEventListener("change", () => { $("wheel-items").value = ""; drawWheel(); });
   // 도구 - 소음 측정기
   $("noise-toggle")?.addEventListener("click", toggleNoise);
+  // 도구 - 음성 녹음·변조
+  $("rec-toggle")?.addEventListener("click", toggleRecord);
+  $("rec-play")?.addEventListener("click", playRecording);
+  $("rec-save")?.addEventListener("click", saveRecording);
+  $("rec-effect")?.addEventListener("change", () => { if (recBuffer) playRecording(); });
   // 도구 - 신호등
   $("signal-lights")?.addEventListener("click", (e) => { const b = e.target.closest(".signal-light"); if (b) setSignal(b.dataset.signal); });
   // 도구 - 화이트보드

@@ -478,6 +478,28 @@
         </div>
 
         <div class="tool-card">
+          <h3>🎙️ 음성 녹음·변조</h3>
+          <div class="tool-row">
+            <button id="rec-toggle" class="btn btn-primary btn-sm">● 녹음 시작</button>
+            <span id="rec-status" class="muted" style="font-size:0.8rem;">마이크 권한이 필요합니다</span>
+          </div>
+          <div class="tool-row">
+            <label>변조
+              <select id="rec-effect" title="목소리 바꾸기">
+                <option value="none">원본</option>
+                <option value="high">🐿️ 높은 목소리</option>
+                <option value="low">👹 낮은 목소리</option>
+                <option value="robot">🤖 로봇</option>
+                <option value="echo">🌊 동굴 에코</option>
+              </select>
+            </label>
+            <button id="rec-play" class="btn btn-primary btn-sm" disabled>▶ 재생</button>
+            <button id="rec-save" class="btn btn-ghost btn-sm" disabled>📥 저장</button>
+          </div>
+          <div id="rec-info" class="rec-info muted">녹음하면 목소리를 바꿔 들어볼 수 있어요.</div>
+        </div>
+
+        <div class="tool-card">
           <h3>🕐 시계</h3>
           <div id="clock-time" class="clock-time">00:00:00</div>
           <div id="clock-date" class="clock-date muted"></div>
