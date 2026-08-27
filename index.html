@@ -500,6 +500,26 @@
         </div>
 
         <div class="tool-card">
+          <h3>🎤 실시간 음성변조 <span class="muted" style="font-weight:400;font-size:0.75rem;">마이크 → 스피커</span></h3>
+          <div class="tool-row">
+            <select id="live-mic" title="마이크 선택"><option value="">기본 마이크</option></select>
+            <select id="live-effect" title="변조 종류">
+              <option value="none">원본</option>
+              <option value="high">🐿️ 높은 목소리</option>
+              <option value="low">👹 낮은 목소리</option>
+              <option value="robot">🤖 로봇</option>
+              <option value="echo">🌊 동굴 에코</option>
+            </select>
+          </div>
+          <div class="tool-row">
+            <button id="live-toggle" class="btn btn-primary btn-sm">🎤 시작</button>
+            <label class="tool-check">출력 <input id="live-volume" type="range" min="0" max="100" value="70" /></label>
+          </div>
+          <div id="live-status" class="rec-info muted">시작하면 마이크 소리가 변조되어 스피커로 나옵니다.</div>
+          <p class="muted" style="font-size:0.75rem; margin:6px 0 0; line-height:1.5;">⚠️ 스피커 소리가 마이크로 되돌아가면 <b>하울링</b>이 생깁니다. 이어폰·헤드셋을 쓰거나 마이크를 스피커에서 멀리 두세요.</p>
+        </div>
+
+        <div class="tool-card">
           <h3>🕐 시계</h3>
           <div id="clock-time" class="clock-time">00:00:00</div>
           <div id="clock-date" class="clock-date muted"></div>

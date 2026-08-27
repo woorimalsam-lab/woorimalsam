@@ -1013,6 +1013,10 @@ body {
 .wheel-result { font-size: 1.05rem; }
 .wheel-result b { color: var(--primary); }
 
+#live-mic, #live-effect { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); max-width: 190px; }
+#live-volume { width: 110px; vertical-align: middle; }
+[data-theme="dark"] #live-mic, [data-theme="dark"] #live-effect { background: #1f2430; border-color: #2a2e38; }
+
 .rec-info { font-size: 0.82rem; margin-top: 10px; line-height: 1.5; }
 #rec-effect { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font-family: inherit; background: var(--panel); color: var(--ink); }
 [data-theme="dark"] #rec-effect { background: #1f2430; border-color: #2a2e38; }

@@ -2956,10 +2956,149 @@ async function saveRecording() {
 
 // 도구 화면을 벗어날 때 정리
 function stopVoiceTool() {
+  stopLiveVoice();
   stopRecord();
   stopRecordStream();
   if (recSource) { try { recSource.stop(); } catch (e) {} recSource = null; }
 }
+
+// ---------- 실시간 음성변조 (마이크 → 스피커) ----------
+// 실시간 피치 변환: 두 개의 딜레이 라인을 교차 페이드하는 고전 기법(Chrome Jungle 방식)
+const PITCH_BUF = 0.100, PITCH_FADE = 0.050, PITCH_DELAY = 0.100;
+function makeFadeBuffer(ctx) {
+  const len1 = Math.floor(PITCH_BUF * ctx.sampleRate);
+  const len2 = Math.floor((PITCH_BUF - 2 * PITCH_FADE) * ctx.sampleRate);
+  const buf = ctx.createBuffer(1, len1 + len2, ctx.sampleRate);
+  const p = buf.getChannelData(0);
+  const fade = PITCH_FADE * ctx.sampleRate, upTo = len1 - fade;
+  for (let i = 0; i < len1; i++) {
+    p[i] = i < fade ? Math.sqrt(i / fade) : (i >= upTo ? Math.sqrt(1 - (i - upTo) / fade) : 1);
+  }
+  return buf;
+}
+function makeDelayBuffer(ctx, shiftUp) {
+  const len1 = Math.floor(PITCH_BUF * ctx.sampleRate);
+  const len2 = Math.floor((PITCH_BUF - 2 * PITCH_FADE) * ctx.sampleRate);
+  const buf = ctx.createBuffer(1, len1 + len2, ctx.sampleRate);
+  const p = buf.getChannelData(0);
+  for (let i = 0; i < len1; i++) p[i] = shiftUp ? (len1 - i) / (len1 + len2) : i / len1;
+  return buf;
+}
+// input/output 노드를 가진 피치 시프터 생성 (mult: +위로 / -아래로, 0~1)
+function createPitchShifter(ctx, mult) {
+  const input = ctx.createGain(), output = ctx.createGain();
+  const delay1 = ctx.createDelay(), delay2 = ctx.createDelay();
+  const mix1 = ctx.createGain(), mix2 = ctx.createGain();
+  mix1.gain.value = 0; mix2.gain.value = 0;
+
+  const up = mult > 0;
+  const dBuf = makeDelayBuffer(ctx, up), fBuf = makeFadeBuffer(ctx);
+  const mod1 = ctx.createBufferSource(), mod2 = ctx.createBufferSource();
+  const fade1 = ctx.createBufferSource(), fade2 = ctx.createBufferSource();
+  [mod1, mod2].forEach((m) => { m.buffer = dBuf; m.loop = true; });
+  [fade1, fade2].forEach((f) => { f.buffer = fBuf; f.loop = true; });
+
+  const modGain1 = ctx.createGain(), modGain2 = ctx.createGain();
+  const amt = 0.5 * PITCH_DELAY * Math.min(1, Math.abs(mult));
+  modGain1.gain.value = amt; modGain2.gain.value = amt;
+  mod1.connect(modGain1); mod2.connect(modGain2);
+  modGain1.connect(delay1.delayTime); modGain2.connect(delay2.delayTime);
+  fade1.connect(mix1.gain); fade2.connect(mix2.gain);
+
+  input.connect(delay1); input.connect(delay2);
+  delay1.connect(mix1); delay2.connect(mix2);
+  mix1.connect(output); mix2.connect(output);
+
+  const t = ctx.currentTime + 0.05, t2 = t + PITCH_BUF - PITCH_FADE;
+  mod1.start(t); fade1.start(t); mod2.start(t2); fade2.start(t2);
+  return { input, output, _srcs: [mod1, mod2, fade1, fade2] };
+}
+
+let liveStream = null, liveSource = null, liveOut = null, liveChain = [];
+
+function liveSetStatus(msg) { const el = $("live-status"); if (el) el.textContent = msg; }
+function liveRunning() { return !!liveStream; }
+
+// 현재 선택한 효과로 마이크→스피커 경로를 다시 구성
+function rebuildLiveChain() {
+  if (!liveSource || !liveOut) return;
+  const ctx = getAudioCtx();
+  try { liveSource.disconnect(); } catch (e) {}
+  liveChain.forEach((n) => { try { n.disconnect(); } catch (e) {} (n._srcs || []).forEach((s) => { try { s.stop(); } catch (e) {} }); });
+  liveChain = [];
+
+  const effect = $("live-effect")?.value || "none";
+  let node = liveSource;
+  if (effect === "high" || effect === "low") {
+    const ps = createPitchShifter(ctx, effect === "high" ? 1.0 : -0.85);   // 다람쥐 / 괴물
+    node.connect(ps.input); node = ps.output; liveChain.push(ps.input, ps.output, ps);
+  } else if (effect === "robot") {
+    const rm = ctx.createGain(); rm.gain.value = 0;
+    const osc = ctx.createOscillator(); osc.type = "sine"; osc.frequency.value = 50;
+    osc.connect(rm.gain); node.connect(rm); node = rm; osc.start();
+    liveChain.push(rm, { disconnect() {}, _srcs: [osc] });
+  } else if (effect === "echo") {
+    const d = ctx.createDelay(1.0); d.delayTime.value = 0.18;
+    const fb = ctx.createGain(); fb.gain.value = 0.35;
+    const mix = ctx.createGain();
+    node.connect(mix); node.connect(d); d.connect(fb); fb.connect(d); d.connect(mix);
+    node = mix; liveChain.push(d, fb, mix);
+  }
+  node.connect(liveOut);
+}
+
+async function fillMicList() {
+  const sel = $("live-mic");
+  if (!sel || !navigator.mediaDevices?.enumerateDevices) return;
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const mics = devs.filter((d) => d.kind === "audioinput");
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">기본 마이크</option>' +
+      mics.map((m, i) => `<option value="${m.deviceId}">${escapeHtml(m.label || "마이크 " + (i + 1))}</option>`).join("");
+    if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+  } catch (e) { /* 목록 조회 실패는 무시 */ }
+}
+
+async function startLiveVoice() {
+  const ctx = getAudioCtx();
+  if (!ctx) { toast("이 브라우저에서는 사용할 수 없습니다"); return; }
+  const deviceId = $("live-mic")?.value;
+  const audio = {
+    echoCancellation: true, noiseSuppression: true, autoGainControl: true,
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+  };
+  try {
+    liveStream = await navigator.mediaDevices.getUserMedia({ audio });
+  } catch (e) {
+    liveStream = null;
+    toast("마이크 권한이 필요합니다");
+    liveSetStatus("마이크를 사용할 수 없습니다 (권한 또는 장치 확인)");
+    return;
+  }
+  await fillMicList();
+  liveSource = ctx.createMediaStreamSource(liveStream);
+  liveOut = ctx.createGain();
+  liveOut.gain.value = (parseInt($("live-volume")?.value) || 70) / 100;
+  liveOut.connect(ctx.destination);
+  rebuildLiveChain();
+  const btn = $("live-toggle");
+  if (btn) { btn.textContent = "■ 정지"; btn.classList.add("btn-danger"); }
+  const label = $("live-mic")?.selectedOptions?.[0]?.textContent || "기본 마이크";
+  liveSetStatus(`🎤 변조 중 — ${label}`);
+}
+function stopLiveVoice() {
+  if (!liveStream && !liveSource) return;   // 실행 중이 아니면 안내 문구 유지
+  liveChain.forEach((n) => { try { n.disconnect(); } catch (e) {} (n._srcs || []).forEach((s) => { try { s.stop(); } catch (e) {} }); });
+  liveChain = [];
+  if (liveSource) { try { liveSource.disconnect(); } catch (e) {} liveSource = null; }
+  if (liveOut) { try { liveOut.disconnect(); } catch (e) {} liveOut = null; }
+  if (liveStream) { liveStream.getTracks().forEach((t) => t.stop()); liveStream = null; }
+  const btn = $("live-toggle");
+  if (btn) { btn.textContent = "🎤 시작"; btn.classList.remove("btn-danger"); }
+  liveSetStatus("정지했습니다. 시작하면 마이크 소리가 변조되어 나옵니다.");
+}
+function toggleLiveVoice() { liveRunning() ? stopLiveVoice() : startLiveVoice(); }
 
 // ---------- 시계 ----------
 function tickClock() {
@@ -4089,6 +4228,12 @@ function bindEventsNew() {
   $("rec-play")?.addEventListener("click", playRecording);
   $("rec-save")?.addEventListener("click", saveRecording);
   $("rec-effect")?.addEventListener("change", () => { if (recBuffer) playRecording(); });
+  // 도구 - 실시간 음성변조
+  $("live-toggle")?.addEventListener("click", toggleLiveVoice);
+  $("live-effect")?.addEventListener("change", () => { if (liveRunning()) rebuildLiveChain(); });
+  $("live-volume")?.addEventListener("input", (e) => { if (liveOut) liveOut.gain.value = (parseInt(e.target.value) || 0) / 100; });
+  $("live-mic")?.addEventListener("change", async () => { if (liveRunning()) { stopLiveVoice(); await startLiveVoice(); } });
+  navigator.mediaDevices?.addEventListener?.("devicechange", () => { if (liveRunning()) fillMicList(); });
   // 도구 - 신호등
   $("signal-lights")?.addEventListener("click", (e) => { const b = e.target.closest(".signal-light"); if (b) setSignal(b.dataset.signal); });
   // 도구 - 화이트보드
