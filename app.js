@@ -1494,7 +1494,7 @@ function setView(name) {
   if (name === "calendar") { renderCalendar(); if (state.selected) renderDayDetail(); }
   if (name === "memo") renderMemos();
   if (name === "tools") renderToolClassSelects();
-  else if (typeof stopNoise === "function" && noiseStream) stopNoise();   // 도구 벗어나면 마이크 해제
+  else { if (noiseStream) stopNoise(); stopAlarm(); }   // 도구 벗어나면 마이크·알람 정리
 
   window.scrollTo(0, 0);
 }
@@ -2579,6 +2579,8 @@ function importData() {
 // ============================================================
 function startTimer() {
   if (state.timerInterval) return;
+  stopAlarm();      // 이전 알람이 울리는 중이면 정리
+  getAudioCtx();    // 클릭(사용자 제스처) 시점에 오디오 잠금 해제
   const seconds = parseInt($("timer-input").value) || 300;
   // 종료 시각 기준으로 계산 (탭이 백그라운드여도 정확)
   const endAt = Date.now() + seconds * 1000;
@@ -2590,6 +2592,7 @@ function startTimer() {
     if (remain <= 0) {
       clearInterval(state.timerInterval);
       state.timerInterval = null;
+      playAlarm();                       // 🔔 종료 알람
       toast("⏱️ 시간 완료!", 8000);
       $("timer-start-btn").classList.remove("hidden");
       $("timer-stop-btn").classList.add("hidden");
@@ -2601,6 +2604,7 @@ function startTimer() {
   $("timer-stop-btn").classList.remove("hidden");
 }
 function stopTimer() {
+  stopAlarm();
   if (state.timerInterval) {
     clearInterval(state.timerInterval);
     state.timerInterval = null;
@@ -3387,20 +3391,58 @@ function makeGroups() {
 // ---------- 토론 타이머 ----------
 let debate = null;   // { stages: [{name, sec}], idx, endAt, remain, timer, paused }
 
-function beep(times = 2) {
+// ---------- 소리 (타이머 알람 · 토론 단계 전환) ----------
+let audioCtx = null;
+function getAudioCtx() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    for (let i = 0; i < times; i++) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.4);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.4 + 0.3);
-      osc.start(ctx.currentTime + i * 0.4);
-      osc.stop(ctx.currentTime + i * 0.4 + 0.32);
-    }
-  } catch { /* 소리 재생 불가 환경은 무시 */ }
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();   // 클릭 시점에 잠금 해제
+    return audioCtx;
+  } catch { return null; }
+}
+// at(초) 시점에 freq Hz 짧은 음 하나
+function tone(ctx, at, freq, dur = 0.25, vol = 0.28) {
+  const osc = ctx.createOscillator(), gain = ctx.createGain();
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.type = "sine";
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol, at);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + dur);
+  osc.start(at); osc.stop(at + dur + 0.02);
+}
+
+// 타이머 종료 알람: 멈출 때까지(최대 20초) 반복
+let alarmInterval = null, alarmTimeout = null;
+function playAlarm(seconds = 20) {
+  const ctx = getAudioCtx();
+  stopAlarm(true);
+  if (ctx) {
+    const burst = () => {
+      const t = ctx.currentTime;
+      tone(ctx, t, 880, 0.18);
+      tone(ctx, t + 0.22, 1175, 0.18);
+      tone(ctx, t + 0.44, 880, 0.28);
+    };
+    burst();
+    alarmInterval = setInterval(burst, 1200);
+    alarmTimeout = setTimeout(() => stopAlarm(), seconds * 1000);
+  }
+  $("timer-alarm-stop")?.classList.remove("hidden");
+  $("timer-display")?.classList.add("timer-ringing");
+}
+function stopAlarm(keepUI) {
+  if (alarmInterval) { clearInterval(alarmInterval); alarmInterval = null; }
+  if (alarmTimeout) { clearTimeout(alarmTimeout); alarmTimeout = null; }
+  if (!keepUI) {
+    $("timer-alarm-stop")?.classList.add("hidden");
+    $("timer-display")?.classList.remove("timer-ringing");
+  }
+}
+
+function beep(times = 2) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  for (let i = 0; i < times; i++) tone(ctx, ctx.currentTime + i * 0.4, 880, 0.3);
 }
 
 function parseDebateStages() {
@@ -3840,6 +3882,7 @@ function bindEventsNew() {
   $("timer-start-btn")?.addEventListener("click", startTimer);
   $("timer-stop-btn")?.addEventListener("click", stopTimer);
   $("timer-reset-btn")?.addEventListener("click", resetTimer);
+  $("timer-alarm-stop")?.addEventListener("click", () => stopAlarm());
 
   // 도구 - 스톱워치
   $("stopwatch-start-btn")?.addEventListener("click", startStopwatch);
