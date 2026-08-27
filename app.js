@@ -3413,19 +3413,23 @@ function tone(ctx, at, freq, dur = 0.25, vol = 0.28) {
 
 // 타이머 종료 알람: 멈출 때까지(최대 20초) 반복
 let alarmInterval = null, alarmTimeout = null;
-function playAlarm(seconds = 20) {
+function playAlarm(bursts = 2) {
   const ctx = getAudioCtx();
   stopAlarm(true);
   if (ctx) {
     const burst = () => {
       const t = ctx.currentTime;
-      tone(ctx, t, 880, 0.18);
-      tone(ctx, t + 0.22, 1175, 0.18);
-      tone(ctx, t + 0.44, 880, 0.28);
+      tone(ctx, t, 880, 0.15);
+      tone(ctx, t + 0.20, 1175, 0.15);
+      tone(ctx, t + 0.40, 880, 0.22);
     };
+    let n = 1;
     burst();
-    alarmInterval = setInterval(burst, 1200);
-    alarmTimeout = setTimeout(() => stopAlarm(), seconds * 1000);
+    alarmInterval = setInterval(() => {
+      if (n >= bursts) { stopAlarm(); return; }   // 짧게 2번만 울리고 종료
+      burst(); n++;
+    }, 900);
+    alarmTimeout = setTimeout(() => stopAlarm(), bursts * 900 + 400);
   }
   $("timer-alarm-stop")?.classList.remove("hidden");
   $("timer-display")?.classList.add("timer-ringing");
