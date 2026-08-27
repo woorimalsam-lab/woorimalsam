@@ -1681,13 +1681,26 @@ function todayDayKey() {
 const COMCI_BASE = "https://woorimalsam-lab.github.io/timetable";
 const comci = { loaded: false, loading: false, teachers: [], perTeacher: {}, times: [], label: "", school: "" };
 
+// 오늘이 포함된 주 → 없으면 지난 주 중 가장 최신 → 그래도 없으면 가장 이른 주
+// (자동 갱신이 밀려 index.json의 current가 옛날일 수 있어 today 기준으로 직접 고름)
+function pickComciWeek(idx) {
+  const weeks = (idx.weeks || []).map((w) => w.start).filter(Boolean).sort();
+  if (!weeks.length) return idx.current;
+  const today = todayStr();
+  const addDays = (ds, n) => { const [y, m, d] = ds.split("-").map(Number); return ymd(new Date(y, m - 1, d + n)); };
+  const containing = weeks.find((s) => s <= today && today <= addDays(s, 6));
+  if (containing) return containing;
+  const past = weeks.filter((s) => s <= today);
+  return past.length ? past[past.length - 1] : weeks[0];
+}
+
 async function loadComci(force) {
   if (comci.loading || (comci.loaded && !force)) return comci.loaded;
   comci.loading = true;
   try {
     const idx = await (await fetch(`${COMCI_BASE}/data/index.json?t=${Date.now()}`)).json();
     const code = idx.school.code;
-    const week = idx.current || (idx.weeks && idx.weeks[0] && idx.weeks[0].start);
+    const week = pickComciWeek(idx);
     const data = await (await fetch(`${COMCI_BASE}/data/${code}_${week}.json?t=${Date.now()}`)).json();
     comci.teachers = data.teachers || [];
     comci.perTeacher = data.per_teacher || {};
