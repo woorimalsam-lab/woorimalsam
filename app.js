@@ -1314,6 +1314,8 @@ function syncRegistry() {
       set: (d) => { observations = (d && !Array.isArray(d)) ? d : {}; if (state.activeView === "observe") renderObservations(); } },
     progress:     { lk: LOCAL_PROGRESS_KEY, get: () => progress,
       set: (d) => { progress = (d && !Array.isArray(d)) ? d : {}; if (state.activeView === "timetable") renderProgress(); } },
+    groupsets:    { lk: LOCAL_GROUPSETS_KEY, get: () => groupSets,
+      set: (d) => { groupSets = Array.isArray(d) ? d : []; if (state.activeView === "tools") renderGroupSets(); } },
     picklog:      { lk: LOCAL_PICKLOG_KEY, get: () => pickLog,
       set: (d) => { pickLog = (d && !Array.isArray(d)) ? d : {}; if (state.activeView === "tools") renderPickerHistory(); } },
     settings:     { lk: LOCAL_SETTINGS_KEY, get: () => state.settings,
@@ -2561,6 +2563,7 @@ function exportData() {
     seating: loadLocal(LOCAL_SEATING_KEY),
     students: loadLocal(LOCAL_STUDENTS_KEY),
     settings: loadLocal(LOCAL_SETTINGS_KEY),
+    groupsets: loadLocal(LOCAL_GROUPSETS_KEY),
     memoCats: loadLocal(LOCAL_MEMOCATS_KEY)
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -3200,6 +3203,7 @@ function renderToolClassSelects() {
   fillGradeClassSelects("group-grade", "group-class");
   fillGradeClassSelects("wheel-grade", "wheel-class");
   renderGroupRoster();
+  renderGroupSets();
   renderPickerHistory();
   drawWheel();
 }
@@ -3685,11 +3689,79 @@ function makeGroups() {
   const groups = leaders.map((l) => [l]);
   rest.forEach((s, i) => groups[i % groups.length].push(s));
 
-  $("group-result").innerHTML = groups.map((g, i) => `
+  lastGroups = groups.map((g) => g.map((s) => ({ num: s.number || "", name: s.name })));
+  renderGroupResult(lastGroups);
+  const save = $("group-save-btn");
+  if (save) save.disabled = false;
+}
+
+// 모둠 결과 표시 (편성 직후 · 저장본 불러오기 공용)
+function renderGroupResult(groups, caption) {
+  const box = $("group-result");
+  if (!box) return;
+  box.innerHTML = (caption ? `<p class="muted" style="margin:0 0 8px;">${escapeHtml(caption)}</p>` : "") +
+    groups.map((g, i) => `
     <div class="group-box">
       <div class="group-box-head">${i + 1}모둠 <span class="muted">${g.length}명</span></div>
-      ${g.map((s, idx) => `<div class="group-member${idx === 0 ? " is-leader" : ""}">${idx === 0 ? "👑 " : ""}${s.number ? `<b>${escapeHtml(s.number)}</b> ` : ""}${escapeHtml(s.name)}</div>`).join("")}
+      ${g.map((s, idx) => `<div class="group-member${idx === 0 ? " is-leader" : ""}">${idx === 0 ? "👑 " : ""}${s.num ? `<b>${escapeHtml(s.num)}</b> ` : ""}${escapeHtml(s.name)}</div>`).join("")}
     </div>`).join("");
+}
+
+// ---------- 모둠 저장 / 불러오기 ----------
+const LOCAL_GROUPSETS_KEY = "myplanner.groupsets";
+let groupSets = [], lastGroups = null;
+
+function loadGroupSets() {
+  const g = loadLocal(LOCAL_GROUPSETS_KEY);
+  groupSets = Array.isArray(g) ? g : [];
+}
+function saveGroupSets() {
+  saveLocal(LOCAL_GROUPSETS_KEY, groupSets);
+  cloudSet("groupsets", groupSets);
+}
+function renderGroupSets() {
+  const sel = $("group-saved");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = groupSets.length
+    ? groupSets.map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("")
+    : '<option value="">저장된 모둠 없음</option>';
+  if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+}
+function saveCurrentGroups() {
+  if (!lastGroups || !lastGroups.length) { toast("먼저 모둠을 편성해 주세요"); return; }
+  const g = $("group-grade")?.value, c = $("group-class")?.value;
+  const [, m, d] = todayStr().split("-").map(Number);
+  const suggested = `${g ? g + "-" : ""}${c || ""} ${m}/${d} 모둠`;
+  const name = (prompt("저장할 이름", suggested) || "").trim();
+  if (!name) return;
+  groupSets.unshift({
+    id: uid(), name, grade: g || "", class: c || "",
+    date: todayStr(), groups: lastGroups,
+  });
+  saveGroupSets();
+  renderGroupSets();
+  const sel = $("group-saved"); if (sel) sel.value = groupSets[0].id;
+  toast(`💾 '${name}' 저장했습니다`);
+}
+function loadGroupSet() {
+  const id = $("group-saved")?.value;
+  const set = groupSets.find((g) => g.id === id);
+  if (!set) { toast("불러올 모둠을 선택해 주세요"); return; }
+  lastGroups = set.groups;
+  const total = set.groups.reduce((n, g) => n + g.length, 0);
+  renderGroupResult(set.groups, `📂 ${set.name} · ${set.date} · ${set.groups.length}모둠 ${total}명`);
+  const save = $("group-save-btn"); if (save) save.disabled = false;
+}
+function deleteGroupSet() {
+  const id = $("group-saved")?.value;
+  const set = groupSets.find((g) => g.id === id);
+  if (!set) return;
+  if (!confirm(`'${set.name}' 저장본을 삭제할까요?`)) return;
+  groupSets = groupSets.filter((g) => g.id !== id);
+  saveGroupSets();
+  renderGroupSets();
+  toast("삭제했습니다");
 }
 
 // ============================================================
@@ -4176,6 +4248,7 @@ function bindEventsNew() {
         if (data.seating) saveLocal(LOCAL_SEATING_KEY, data.seating);
         if (data.students) saveLocal(LOCAL_STUDENTS_KEY, data.students);
         if (data.settings) saveLocal(LOCAL_SETTINGS_KEY, data.settings);
+        if (data.groupsets) saveLocal(LOCAL_GROUPSETS_KEY, data.groupsets);
         toast("데이터 가져오기 완료! 페이지를 새로고침하세요.");
       } catch (e) {
         toast("파일 형식이 올바르지 않습니다");
@@ -4362,6 +4435,9 @@ function bindEventsNew() {
     renderGroupRoster();
   });
   $("group-make-btn")?.addEventListener("click", makeGroups);
+  $("group-save-btn")?.addEventListener("click", saveCurrentGroups);
+  $("group-load-btn")?.addEventListener("click", loadGroupSet);
+  $("group-del-btn")?.addEventListener("click", deleteGroupSet);
 }
 
 async function start() {
@@ -4377,6 +4453,7 @@ async function start() {
   loadStudents();
   loadSettings();
   loadPickLog();
+  loadGroupSets();
   loadAttendance();
   loadAttShare();
   loadObservations();
