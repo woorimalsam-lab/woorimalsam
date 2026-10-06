@@ -1099,6 +1099,9 @@ async function maybeMigrateLocal(user) {
 
 async function logout() {
   if (!fb) return;
+  // 로그아웃하면 게스트 잠금을 다시 건다 (교실 공용 PC 대비)
+  guestUnlocked = false;
+  try { sessionStorage.removeItem(SESSION_UNLOCK_KEY); } catch {}
   await fb.authMod.signOut(fb.auth);
   toast("로그아웃 되었습니다.");
 }
@@ -1118,6 +1121,7 @@ function updateAccountUI() {
     badge.textContent = isConfigured ? "로그인 필요" : "로컬 저장 모드";
     badge.classList.remove("synced");
   }
+  applyAuthGate();
 }
 
 // ============================================================
@@ -1575,6 +1579,11 @@ function bindEvents() {
   });
 
   $("login-btn").addEventListener("click", login);
+  $("guest-login-btn")?.addEventListener("click", login);
+  $("guest-unlock")?.addEventListener("click", guestUnlock);
+  $("guest-roster")?.addEventListener("input", renderGuestRosterCount);
+  $("guest-roster-save")?.addEventListener("click", saveGuestRoster);
+  $("guest-roster-clear")?.addEventListener("click", clearGuestRoster);
   $("logout-btn").addEventListener("click", logout);
 
   // 탭 전환
@@ -3191,7 +3200,86 @@ function fillGradeClassSelects(gradeId, classId) {
   if (classes.includes(prevC)) cSel.value = prevC;
 }
 // 선택된 학년·학급의 학생 (번호순)
+// ============================================================
+//  게스트 모드 — 로그인하지 않으면 '도구' 탭만 보인다
+//  개인 자료(일정·메모·학생·출결·자리배치)는 탭 자체가 숨겨지고,
+//  도구가 쓰는 명단도 아래 게스트 명단(이 기기 localStorage)으로 바뀐다.
+// ============================================================
+const LOCAL_GUEST_ROSTER_KEY = "myplanner.guestroster";
+const SESSION_UNLOCK_KEY = "myplanner.unlocked";
+let guestUnlocked = false;
+
+// 잠금 조건: Firebase를 쓰는 배포본인데 로그인하지 않았고, 수동 해제도 안 한 상태
+function appLocked() {
+  return isConfigured && !state.user && !guestUnlocked;
+}
+
+function guestRosterNames() {
+  const raw = $("guest-roster")?.value || "";
+  return [...new Set(raw.split(/[,\n\t]/).map((s) => s.trim()).filter(Boolean))];
+}
+// toolStudents가 기대하는 모양({id, name, number, grade, class})으로 맞춰 준다
+function guestRosterStudents() {
+  return guestRosterNames().map((name, i) => ({
+    id: "g" + i, name, number: "", grade: "", class: "",
+  }));
+}
+function renderGuestRosterCount() {
+  const el = $("guest-roster-count");
+  if (!el) return;
+  const n = guestRosterNames().length;
+  el.textContent = n ? `${n}명` : "";
+}
+function loadGuestRoster() {
+  const saved = loadLocal(LOCAL_GUEST_ROSTER_KEY);
+  if (typeof saved === "string" && $("guest-roster")) $("guest-roster").value = saved;
+  renderGuestRosterCount();
+}
+function saveGuestRoster() {
+  saveLocal(LOCAL_GUEST_ROSTER_KEY, $("guest-roster")?.value || "");
+  renderGuestRosterCount();
+  renderToolClassSelects();
+  toast(`💾 명단 ${guestRosterNames().length}명 저장 (이 기기에만)`);
+}
+function clearGuestRoster() {
+  if (!confirm("명단을 지울까요?")) return;
+  $("guest-roster").value = "";
+  saveLocal(LOCAL_GUEST_ROSTER_KEY, "");
+  renderGuestRosterCount();
+  renderToolClassSelects();
+}
+// 로그인이 막혔을 때를 위한 탈출구 (이 기기 localStorage 자료 보기)
+function guestUnlock() {
+  guestUnlocked = true;
+  try { sessionStorage.setItem(SESSION_UNLOCK_KEY, "1"); } catch {}
+  applyAuthGate();
+  toast("이 기기에 저장된 자료를 엽니다. 다른 기기와 동기화하려면 로그인하세요.", 4000);
+}
+
+// 탭 표시/숨김 + 도구 뷰 강제
+const OWNER_TITLE = document.title;
+const OWNER_BRAND = document.querySelector(".brand span")?.textContent || OWNER_TITLE;
+const GUEST_TITLE = "수업 도구";
+
+function applyAuthGate() {
+  const locked = appLocked();
+  document.body.classList.toggle("guest", locked);
+  // 비로그인 방문자에게 교사 이름이 들어간 앱 이름을 보이지 않는다
+  document.title = locked ? GUEST_TITLE : OWNER_TITLE;
+  const brandEl = document.querySelector(".brand span");
+  if (brandEl) brandEl.textContent = locked ? GUEST_TITLE : OWNER_BRAND;
+  const brandIcon = document.querySelector(".brand");
+  if (brandIcon) brandIcon.firstChild.nodeValue = locked ? "🛠️ " : "📌 ";
+  $("guest-box")?.classList.toggle("hidden", !locked);
+  $("tabbar")?.querySelectorAll(".navbtn").forEach((b) => {
+    b.classList.toggle("hidden", locked && b.dataset.view !== "tools");
+  });
+  if (locked && state.activeView !== "tools") setView("tools");
+  if (!locked && state.activeView === "tools") renderToolClassSelects();
+}
+
 function toolStudents(gradeId, classId) {
+  if (appLocked()) return guestRosterStudents();   // 비로그인: 내 학생 명단 대신 게스트 명단
   const g = $(gradeId)?.value ?? "", c = $(classId)?.value ?? "";
   if (!state.students.length) return [];
   return state.students
@@ -3199,6 +3287,17 @@ function toolStudents(gradeId, classId) {
     .sort((a, b) => (Number(a.number) || 0) - (Number(b.number) || 0));
 }
 function renderToolClassSelects() {
+  if (appLocked()) {
+    // 게스트: 학년·반 드롭다운은 비우고(= 학급 이름 노출 방지) 게스트 명단으로만 동작
+    for (const id of ["picker-grade", "picker-class", "group-grade", "group-class", "wheel-grade", "wheel-class"]) {
+      const el = $(id); if (el) el.innerHTML = "";
+    }
+    renderGroupRoster();
+    renderGroupSets();
+    renderPickerHistory();
+    drawWheel();
+    return;
+  }
   fillGradeClassSelects("picker-grade", "picker-class");
   fillGradeClassSelects("group-grade", "group-class");
   fillGradeClassSelects("wheel-grade", "wheel-class");
@@ -3221,6 +3320,7 @@ function savePickLog() {
   cloudSet("picklog", pickLog);
 }
 function pickerKey() {
+  if (appLocked()) return "guest";   // 내 학급 기록과 섞이지 않게 분리
   return `${$("picker-grade")?.value ?? ""}-${$("picker-class")?.value ?? ""}`;
 }
 
@@ -3723,8 +3823,11 @@ function renderGroupSets() {
   const sel = $("group-saved");
   if (!sel) return;
   const prev = sel.value;
-  sel.innerHTML = groupSets.length
-    ? groupSets.map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("")
+  // 게스트가 저장한 모둠과 내 모둠은 서로 보이지 않게 분리
+  const locked = appLocked();
+  const list = groupSets.filter((g) => !!g.guest === locked);
+  sel.innerHTML = list.length
+    ? list.map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("")
     : '<option value="">저장된 모둠 없음</option>';
   if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
 }
@@ -3732,12 +3835,12 @@ function saveCurrentGroups() {
   if (!lastGroups || !lastGroups.length) { toast("먼저 모둠을 편성해 주세요"); return; }
   const g = $("group-grade")?.value, c = $("group-class")?.value;
   const [, m, d] = todayStr().split("-").map(Number);
-  const suggested = `${g ? g + "-" : ""}${c || ""} ${m}/${d} 모둠`;
+  const suggested = appLocked() ? `${m}/${d} 모둠` : `${g ? g + "-" : ""}${c || ""} ${m}/${d} 모둠`;
   const name = (prompt("저장할 이름", suggested) || "").trim();
   if (!name) return;
   groupSets.unshift({
     id: uid(), name, grade: g || "", class: c || "",
-    date: todayStr(), groups: lastGroups,
+    date: todayStr(), groups: lastGroups, guest: appLocked(),
   });
   saveGroupSets();
   renderGroupSets();
@@ -3746,7 +3849,7 @@ function saveCurrentGroups() {
 }
 function loadGroupSet() {
   const id = $("group-saved")?.value;
-  const set = groupSets.find((g) => g.id === id);
+  const set = groupSets.find((g) => g.id === id && !!g.guest === appLocked());
   if (!set) { toast("불러올 모둠을 선택해 주세요"); return; }
   lastGroups = set.groups;
   const total = set.groups.reduce((n, g) => n + g.length, 0);
@@ -3755,7 +3858,7 @@ function loadGroupSet() {
 }
 function deleteGroupSet() {
   const id = $("group-saved")?.value;
-  const set = groupSets.find((g) => g.id === id);
+  const set = groupSets.find((g) => g.id === id && !!g.guest === appLocked());
   if (!set) return;
   if (!confirm(`'${set.name}' 저장본을 삭제할까요?`)) return;
   groupSets = groupSets.filter((g) => g.id !== id);
@@ -4485,8 +4588,11 @@ async function start() {
   renderDayDetail();
   renderSeating();
   renderStudents();
-  const startView = state.settings?.home || "home";   // 설정의 첫 화면
+  try { guestUnlocked = sessionStorage.getItem(SESSION_UNLOCK_KEY) === "1"; } catch {}
+  loadGuestRoster();
+  const startView = appLocked() ? "tools" : (state.settings?.home || "home");   // 비로그인은 도구만
   setView(["home","timetable","seating","students","attendance","observe","calendar","memo","tools","settings"].includes(startView) ? startView : "home");
+  applyAuthGate();
 }
 
 start();

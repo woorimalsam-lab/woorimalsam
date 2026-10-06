@@ -1278,3 +1278,28 @@ body {
   .seating-board { letter-spacing: 4px; padding: 6px; }
 }
 [data-theme="dark"] .btn-icon { color: var(--ink); }
+
+/* ---------- 게스트 모드 (비로그인 = 도구만) ---------- */
+.guest-box {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+.guest-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.guest-head h2 { margin: 0; font-size: 1.05rem; flex: 1; }
+.guest-desc { margin: 0 0 10px; line-height: 1.7; font-size: 0.84rem; }
+.guest-box .tool-textarea { margin-bottom: 10px; }
+.guest-box .tool-row { margin-bottom: 0; }
+.guest-unlock-hint { margin: 10px 0 0; font-size: 0.78rem; }
+.linklike {
+  border: none; background: none; padding: 0;
+  color: var(--primary); font-family: inherit; font-size: inherit;
+  text-decoration: underline; cursor: pointer;
+}
+/* 게스트일 때는 학년·반 드롭다운을 감춘다 (학급 이름 노출 방지) */
+body.guest #picker-grade, body.guest #picker-class,
+body.guest #group-grade, body.guest #group-class,
+body.guest #wheel-grade, body.guest #wheel-class { display: none; }

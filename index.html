@@ -329,6 +329,29 @@
 
     <!-- ============ 도구 ============ -->
     <section id="view-tools" class="view hidden">
+      <!-- 로그인하지 않았을 때만 보이는 안내 + 공용 명단 (게스트 모드) -->
+      <div id="guest-box" class="guest-box hidden">
+        <div class="guest-head">
+          <h2>🛠️ 수업 도구</h2>
+          <button id="guest-login-btn" class="btn btn-primary btn-sm">구글 로그인</button>
+        </div>
+        <p class="guest-desc muted">
+          도구는 로그인 없이 누구나 쓸 수 있습니다. 로그인하면 일정·메모·학생 기록·출결·자리배치가 함께 열립니다.<br />
+          🔒 아래 명단은 <b>이 기기의 브라우저에만</b> 저장되며, 어디로도 전송되지 않습니다.
+        </p>
+        <textarea id="guest-roster" rows="3" class="tool-textarea"
+          placeholder="이름을 쉼표나 줄바꿈으로 구분해 입력하세요&#10;예: 김민준, 이서연, 박지호, 최수아&#10;(엑셀의 한 열을 그대로 복사해 붙여넣어도 됩니다)"></textarea>
+        <div class="tool-row">
+          <button id="guest-roster-save" class="btn btn-primary btn-sm">명단 저장</button>
+          <button id="guest-roster-clear" class="btn btn-ghost btn-sm">지우기</button>
+          <span id="guest-roster-count" class="muted"></span>
+        </div>
+        <p class="guest-unlock-hint muted">
+          이 기기에 저장해 둔 내 자료를 로그인 없이 보려면
+          <button id="guest-unlock" class="linklike">여기를 누르세요</button>.
+        </p>
+      </div>
+
       <div class="tools-grid">
         <div class="tool-card">
           <h3>⏱️ 타이머</h3>
