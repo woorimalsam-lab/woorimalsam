@@ -1329,3 +1329,4 @@ body {
 .count-bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 4px 0 6px; }
 .count-bar span { display: block; height: 100%; background: var(--primary); transition: width 0.15s ease; }
 .count-bar span.is-over { background: var(--danger); }
+.site-credit { margin-top: 10px; font-size: 0.82rem; font-weight: 600; color: var(--muted); letter-spacing: 0.01em; }
