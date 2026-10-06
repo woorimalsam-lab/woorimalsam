@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>수업 도구 모음</title>
+  <meta name="description" content="교실에서 바로 쓰는 수업 도구 모음 — 타이머, 이름 뽑기, 모둠 편성, 자리 배치, 돌림판, 소음 측정기, 음성 변조, 화이트보드. 설치·로그인 없이 바로 사용하세요." />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🛠️ <span>수업 도구 모음</span></div>
+    <div class="account">
+      <button id="theme-btn" class="btn btn-ghost btn-icon" title="다크 모드 전환">🌙</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <p class="site-intro muted">
+      설치도 로그인도 필요 없습니다. 교실 화면에 띄워놓고 바로 쓰세요.<br />
+      🔒 입력한 명단·모둠·자리배치는 <b>이 기기의 브라우저에만</b> 저장되며, 어디로도 전송되지 않습니다.
+    </p>
+
+    <!-- 공용 명단: 이름 뽑기 · 모둠 편성 · 자리 배치 · 돌림판에서 함께 사용 -->
+    <div class="panel roster-panel">
+      <div class="panel-head">
+        <h2>📋 명단 <span class="muted" style="font-weight:400;font-size:0.8rem;">이름 뽑기 · 모둠 편성 · 자리 배치 · 돌림판에서 사용</span></h2>
+        <span id="roster-count" class="muted"></span>
+      </div>
+      <textarea id="roster" rows="3" class="tool-textarea"
+        placeholder="이름을 쉼표나 줄바꿈으로 구분해 입력하세요&#10;예: 김민준, 이서연, 박지호, 최수아&#10;(엑셀의 한 열을 그대로 복사해 붙여넣어도 됩니다)"></textarea>
+      <div class="tool-row">
+        <button id="roster-save" class="btn btn-primary btn-sm">명단 저장</button>
+        <button id="roster-clear" class="btn btn-ghost btn-sm">지우기</button>
+        <button id="roster-numbers" class="btn btn-ghost btn-sm">번호로 채우기</button>
+      </div>
+    </div>
+
+    <div class="tools-grid">
+
+      <div class="tool-card">
+        <h3>⏱️ 타이머</h3>
+        <div class="timer-display" id="timer-display">00:00</div>
+        <div class="timer-controls">
+          <input id="timer-input" type="number" placeholder="초" value="300" min="1" max="3600" />
+          <button id="timer-start-btn" class="btn btn-primary btn-sm">시작</button>
+          <button id="timer-stop-btn" class="btn btn-ghost btn-sm hidden">중지</button>
+          <button id="timer-reset-btn" class="btn btn-ghost btn-sm">리셋</button>
+          <button id="timer-alarm-stop" class="btn btn-danger btn-sm hidden">🔔 알람 끄기</button>
+        </div>
+        <div class="tool-row" style="margin-top:8px;">
+          <button class="btn btn-ghost btn-sm" data-timer="60">1분</button>
+          <button class="btn btn-ghost btn-sm" data-timer="180">3분</button>
+          <button class="btn btn-ghost btn-sm" data-timer="300">5분</button>
+          <button class="btn btn-ghost btn-sm" data-timer="600">10분</button>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <h3>⏲️ 스톱워치</h3>
+        <div class="stopwatch-display" id="stopwatch-display">00:00.0</div>
+        <div class="stopwatch-controls">
+          <button id="stopwatch-start-btn" class="btn btn-primary btn-sm">시작</button>
+          <button id="stopwatch-stop-btn" class="btn btn-ghost btn-sm hidden">중지</button>
+          <button id="stopwatch-reset-btn" class="btn btn-ghost btn-sm">리셋</button>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <h3>🙋 이름 뽑기</h3>
+        <div class="tool-row">
+          <label class="tool-check"><input id="picker-norepeat" type="checkbox" checked /> 중복 제외</label>
+          <button id="picker-btn" class="btn btn-primary btn-sm">뽑기</button>
+          <button id="picker-reset" class="btn btn-ghost btn-sm">기록 지우기</button>
+        </div>
+        <div id="picker-result" class="picker-result">위 명단에서 무작위로 뽑아요</div>
+        <div id="picker-history" class="picker-history"></div>
+      </div>
+
+      <div class="tool-card tool-card-wide">
+        <h3>👥 모둠 편성</h3>
+        <div class="tool-row">
+          <label class="tool-check">모둠 수 <input id="group-count" type="number" value="4" min="2" max="12" /></label>
+          <button id="group-make-btn" class="btn btn-primary btn-sm">🔀 모둠 짜기</button>
+          <button id="group-save-btn" class="btn btn-ghost btn-sm" disabled>💾 저장</button>
+          <select id="group-saved" title="저장된 모둠"><option value="">저장된 모둠 없음</option></select>
+          <button id="group-load-btn" class="btn btn-ghost btn-sm">불러오기</button>
+          <button id="group-del-btn" class="btn btn-ghost btn-sm">삭제</button>
+        </div>
+        <div id="group-result" class="group-result"></div>
+      </div>
+
+      <div class="tool-card tool-card-wide">
+        <h3>🪑 자리 배치 <span id="seating-count" class="muted" style="font-weight:400;font-size:0.8rem;"></span></h3>
+        <div class="tool-row">
+          <label class="tool-check">행 <input id="seating-rows" type="number" value="5" min="1" max="12" /></label>
+          <label class="tool-check">열 <input id="seating-cols" type="number" value="6" min="1" max="12" /></label>
+          <label class="tool-check">줄 묶음
+            <select id="seating-pair">
+              <option value="2">2명씩</option>
+              <option value="1">1명씩</option>
+            </select>
+          </label>
+          <label class="tool-check">보기
+            <select id="seating-view">
+              <option value="teacher">교탁에서</option>
+              <option value="student">학생석에서</option>
+            </select>
+          </label>
+          <button id="seating-random" class="btn btn-primary btn-sm">🔀 무작위 배치</button>
+          <button id="seating-print" class="btn btn-ghost btn-sm">🖨️ 좌석표 인쇄</button>
+        </div>
+        <div id="seating-display" class="seating-display"></div>
+      </div>
+
+      <div class="tool-card tool-card-wide">
+        <h3>⚖️ 토론 타이머</h3>
+        <div id="debate-setup">
+          <p class="muted" style="margin: 0 0 6px; font-size: 0.8rem;">한 줄에 하나씩 <b>단계 이름 분:초</b></p>
+          <textarea id="debate-stages" rows="6" class="tool-textarea">찬성 입론 2:00
+반대 입론 2:00
+반대 반론 1:30
+찬성 반론 1:30
+찬성 최종 발언 1:00
+반대 최종 발언 1:00</textarea>
+          <button id="debate-start-btn" class="btn btn-primary btn-sm">토론 시작</button>
+        </div>
+        <div id="debate-run" class="hidden">
+          <div id="debate-stage-label" class="debate-stage-label"></div>
+          <div id="debate-timer" class="debate-timer">0:00</div>
+          <div id="debate-next" class="debate-next muted"></div>
+          <div class="tool-row" style="margin-top: 10px;">
+            <button id="debate-pause-btn" class="btn btn-sm">⏸ 일시정지</button>
+            <button id="debate-skip-btn" class="btn btn-sm btn-ghost">다음 단계 ▸</button>
+            <button id="debate-reset-btn" class="btn btn-sm btn-ghost">처음으로</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <h3>❓ 퀴즈 (초성·문답)</h3>
+        <p class="muted" style="margin: 0 0 6px; font-size: 0.78rem;">
+          <b>문제 = 정답</b> 형식이면 문제가 먼저 나오고, <b>단어만</b> 쓰면 초성 퀴즈가 됩니다
+        </p>
+        <textarea id="chosung-words" rows="4" class="tool-textarea" placeholder="말과 반대로 표현하는 방법은? = 반어법&#10;은유법&#10;직유법"></textarea>
+        <div class="tool-row">
+          <button id="chosung-next-btn" class="btn btn-primary btn-sm">문제 내기</button>
+          <button id="chosung-reveal-btn" class="btn btn-ghost btn-sm">정답 보기</button>
+          <span id="chosung-remain" class="muted"></span>
+        </div>
+        <div id="chosung-display" class="picker-result">문제 목록을 넣고 '문제 내기'를 누르세요</div>
+      </div>
+
+      <div class="tool-card">
+        <h3>🎰 낱말 뽑기</h3>
+        <textarea id="word-list" rows="3" class="tool-textarea" placeholder="낱말·주제를 쉼표나 줄바꿈으로 구분해 입력"></textarea>
+        <div class="tool-row">
+          <button id="word-pick-btn" class="btn btn-primary btn-sm">뽑기</button>
+          <span id="word-remain" class="muted"></span>
+        </div>
+        <div id="word-display" class="picker-result">목록에서 하나씩, 중복 없이 뽑아요</div>
+      </div>
+
+      <div class="tool-card">
+        <h3>🎡 돌림판</h3>
+        <div class="tool-row">
+          <button id="wheel-from-roster" class="btn btn-ghost btn-sm">명단 가져오기</button>
+        </div>
+        <textarea id="wheel-items" rows="2" class="tool-textarea" placeholder="항목을 쉼표나 줄바꿈으로 입력 (비우면 위 명단 사용)"></textarea>
+        <div class="wheel-stage">
+          <div class="wheel-pointer">▼</div>
+          <svg id="wheel-svg" viewBox="0 0 200 200" class="wheel-svg"></svg>
+        </div>
+        <div class="tool-row">
+          <button id="wheel-spin" class="btn btn-primary btn-sm">돌리기</button>
+          <span id="wheel-result" class="wheel-result"></span>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <h3>🎯 번호뽑기</h3>
+        <div class="numberpick-input">
+          <label>범위: <input id="numberpick-min" type="number" value="1" /> ~ <input id="numberpick-max" type="number" value="30" /></label>
+          <button id="numberpick-btn" class="btn btn-primary btn-sm">뽑기</button>
+        </div>
+        <div id="numberpick-result" class="numberpick-result"></div>
+      </div>
+
+      <div class="tool-card">
+        <h3>🗳️ 투표</h3>
+        <div class="vote-input">
+          <input id="vote-option" type="text" placeholder="선택지 입력 (쉼표로 구분)" />
+          <button id="vote-create-btn" class="btn btn-primary btn-sm">투표 시작</button>
+        </div>
+        <div id="vote-display" class="vote-display"></div>
+      </div>
+
+      <div class="tool-card">
+        <h3>📏 글자 수·원고지</h3>
+        <textarea id="count-text" rows="5" class="tool-textarea" placeholder="글을 붙여넣으면 바로 계산됩니다"></textarea>
+        <div id="count-result" class="count-result"></div>
+      </div>
+
+      <div class="tool-card">
+        <h3>🔊 소음 측정기</h3>
+        <div class="noise-meter">
+          <div id="noise-bar" class="noise-bar"><span id="noise-fill" class="noise-fill"></span></div>
+          <div id="noise-val" class="noise-val">–</div>
+        </div>
+        <div class="tool-row">
+          <button id="noise-toggle" class="btn btn-primary btn-sm">측정 시작</button>
+          <span class="muted" style="font-size:0.78rem;">마이크 권한이 필요합니다</span>
+        </div>
+      </div>
+
+      <div class="tool-card">
+        <h3>🎙️ 음성 녹음·변조</h3>
+        <div class="tool-row">
+          <button id="rec-toggle" class="btn btn-primary btn-sm">● 녹음 시작</button>
+          <span id="rec-status" class="muted" style="font-size:0.8rem;">마이크 권한이 필요합니다</span>
+        </div>
+        <div class="tool-row">
+          <label>변조
+            <select id="rec-effect" title="목소리 바꾸기">
+              <option value="none">원본</option>
+              <option value="high">🐿️ 높은 목소리</option>
+              <option value="low">👹 낮은 목소리</option>
+              <option value="robot">🤖 로봇</option>
+              <option value="echo">🌊 동굴 에코</option>
+            </select>
+          </label>
+          <button id="rec-play" class="btn btn-primary btn-sm" disabled>▶ 재생</button>
+          <button id="rec-save" class="btn btn-ghost btn-sm" disabled>📥 저장</button>
+        </div>
+        <div id="rec-info" class="rec-info muted">녹음하면 목소리를 바꿔 들어볼 수 있어요.</div>
+      </div>
+
+      <div class="tool-card">
+        <h3>🎤 실시간 음성변조 <span class="muted" style="font-weight:400;font-size:0.75rem;">마이크 → 스피커</span></h3>
+        <div class="tool-row">
+          <select id="live-mic" title="마이크 선택"><option value="">기본 마이크</option></select>
+          <select id="live-effect" title="변조 종류">
+            <option value="none">원본</option>
+            <option value="high">🐿️ 높은 목소리</option>
+            <option value="low">👹 낮은 목소리</option>
+            <option value="robot">🤖 로봇</option>
+            <option value="echo">🌊 동굴 에코</option>
+          </select>
+        </div>
+        <div class="tool-row">
+          <button id="live-toggle" class="btn btn-primary btn-sm">🎤 시작</button>
+          <label class="tool-check">출력 <input id="live-volume" type="range" min="0" max="100" value="70" /></label>
+        </div>
+        <div id="live-status" class="rec-info muted">시작하면 마이크 소리가 변조되어 스피커로 나옵니다.</div>
+        <p class="muted" style="font-size:0.75rem; margin:6px 0 0; line-height:1.5;">⚠️ 스피커 소리가 마이크로 되돌아가면 <b>하울링</b>이 생깁니다. 이어폰을 쓰거나 마이크를 스피커에서 멀리 두세요.</p>
+      </div>
+
+      <div class="tool-card">
+        <h3>🕐 시계</h3>
+        <div id="clock-time" class="clock-time">00:00:00</div>
+        <div id="clock-date" class="clock-date muted"></div>
+      </div>
+
+      <div class="tool-card">
+        <h3>🚦 신호등 <span class="muted" style="font-weight:400;font-size:0.78rem;">정숙 신호</span></h3>
+        <div class="signal-lights" id="signal-lights">
+          <button class="signal-light red" data-signal="red" title="조용히"></button>
+          <button class="signal-light yellow" data-signal="yellow" title="속삭이기"></button>
+          <button class="signal-light green active" data-signal="green" title="자유롭게"></button>
+        </div>
+        <div id="signal-label" class="signal-label">🟢 자유롭게 이야기해요</div>
+      </div>
+
+      <div class="tool-card tool-card-wide">
+        <h3>🎨 화이트보드</h3>
+        <div class="wb-toolbar">
+          <input id="wb-color" type="color" value="#e5484d" title="색" />
+          <label>굵기 <input id="wb-size" type="range" min="1" max="24" value="4" /></label>
+          <button id="wb-eraser" class="btn btn-ghost btn-sm">지우개</button>
+          <button id="wb-clear" class="btn btn-ghost btn-sm">전체 지우기</button>
+          <button id="wb-save" class="btn btn-ghost btn-sm">📥 이미지 저장</button>
+        </div>
+        <canvas id="wb-canvas" class="wb-canvas" width="900" height="360"></canvas>
+      </div>
+
+    </div>
+
+    <footer class="site-footer muted">
+      수업 도구 모음 · 모든 기능은 브라우저 안에서만 동작하며, 입력한 내용은 서버로 전송되지 않습니다.
+    </footer>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
