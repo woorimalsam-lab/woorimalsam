@@ -34,16 +34,12 @@
         <button id="roster-upload" class="btn btn-primary btn-sm">📁 명단 업로드 (.xlsx · .csv)</button>
         <button id="roster-numbers" class="btn btn-ghost btn-sm">번호로 채우기</button>
         <button id="roster-clear" class="btn btn-ghost btn-sm">지우기</button>
-        <span id="roster-class-wrap" class="roster-class-wrap hidden">
-          <select id="roster-grade" title="학년"></select>
-          <select id="roster-class" title="반"></select>
-        </span>
       </div>
       <div id="roster-status" class="roster-status muted"></div>
       <textarea id="roster" rows="3" class="tool-textarea"
         placeholder="파일을 올리거나, 여기에 직접 입력해도 됩니다 (입력하면 자동 저장)&#10;예: 김민준, 이서연, 박지호&#10;번호를 붙이려면: 1 김민준"></textarea>
       <p class="muted" style="font-size:0.75rem; margin:8px 0 0; line-height:1.6;">
-        나이스 명렬표(.xlsx)를 그대로 올리면 <b>학년·반을 구분</b>해 읽습니다.
+        나이스 명렬표(.xlsx)를 그대로 올리면 <b>학년·반을 구분</b>해 읽고, 아래 도구마다 반을 따로 고를 수 있습니다.
         🔒 올린 파일은 이 브라우저 안에서만 열리고, 명단은 이 기기에만 저장됩니다.
       </p>
     </div>
@@ -81,6 +77,10 @@
       <div class="tool-card">
         <h3>🙋 이름 뽑기</h3>
         <div class="tool-row">
+          <span id="picker-cls" class="cls-sel hidden">
+            <select id="picker-grade" title="학년"></select>
+            <select id="picker-class" title="반"></select>
+          </span>
           <label class="tool-check"><input id="picker-norepeat" type="checkbox" checked /> 중복 제외</label>
           <button id="picker-btn" class="btn btn-primary btn-sm">뽑기</button>
           <button id="picker-reset" class="btn btn-ghost btn-sm">기록 지우기</button>
@@ -92,6 +92,10 @@
       <div class="tool-card tool-card-wide">
         <h3>👥 모둠 편성</h3>
         <div class="tool-row">
+          <span id="group-cls" class="cls-sel hidden">
+            <select id="group-grade" title="학년"></select>
+            <select id="group-class" title="반"></select>
+          </span>
           <label class="tool-check">모둠 수 <input id="group-count" type="number" value="4" min="2" max="12" /></label>
           <button id="group-make-btn" class="btn btn-primary btn-sm">🔀 모둠 짜기</button>
           <button id="group-save-btn" class="btn btn-ghost btn-sm" disabled>💾 저장</button>
@@ -99,12 +103,17 @@
           <button id="group-load-btn" class="btn btn-ghost btn-sm">불러오기</button>
           <button id="group-del-btn" class="btn btn-ghost btn-sm">삭제</button>
         </div>
+        <div id="group-roster" class="group-roster"></div>
         <div id="group-result" class="group-result"></div>
       </div>
 
       <div class="tool-card tool-card-wide">
         <h3>🪑 자리 배치 <span id="seating-count" class="muted" style="font-weight:400;font-size:0.8rem;"></span></h3>
         <div class="tool-row">
+          <span id="seating-cls" class="cls-sel hidden">
+            <select id="seating-grade" title="학년"></select>
+            <select id="seating-class" title="반"></select>
+          </span>
           <label class="tool-check">행 <input id="seating-rows" type="number" value="5" min="1" max="12" /></label>
           <label class="tool-check">열 <input id="seating-cols" type="number" value="6" min="1" max="12" /></label>
           <label class="tool-check">줄 묶음
@@ -176,6 +185,10 @@
       <div class="tool-card">
         <h3>🎡 돌림판</h3>
         <div class="tool-row">
+          <span id="wheel-cls" class="cls-sel hidden">
+            <select id="wheel-grade" title="학년"></select>
+            <select id="wheel-class" title="반"></select>
+          </span>
           <button id="wheel-from-roster" class="btn btn-ghost btn-sm">명단 가져오기</button>
         </div>
         <textarea id="wheel-items" rows="2" class="tool-textarea" placeholder="항목을 쉼표나 줄바꿈으로 입력 (비우면 위 명단 사용)"></textarea>

@@ -965,22 +965,30 @@ function allStudents() {
 function hasClasses() {
   return uploaded.some((s) => s.grade || s.class);
 }
-// 지금 선택된 학급의 학생 (학급 구분이 없으면 전체) — 모든 도구가 이걸 쓴다
-function activeStudents() {
+// 도구 카드마다 학년·반을 따로 고른다
+const CARD_SELECTS = [
+  ["picker-cls", "picker-grade", "picker-class"],
+  ["group-cls", "group-grade", "group-class"],
+  ["seating-cls", "seating-grade", "seating-class"],
+  ["wheel-cls", "wheel-grade", "wheel-class"],
+];
+
+// 선택된 학급의 학생 (학급 구분이 없으면 전체), 번호순
+function studentsOf(gradeId, classId) {
   const pool = allStudents();
   if (!hasClasses()) return pool;
-  const g = $("roster-grade")?.value ?? "", c = $("roster-class")?.value ?? "";
+  const g = $(gradeId)?.value ?? "", c = $(classId)?.value ?? "";
   return pool
     .filter((s) => (s.grade || "") === g && (s.class || "") === c)
     .sort((a, b) => (Number(a.number) || 0) - (Number(b.number) || 0));
 }
 // 이름만 (번호가 있으면 "3 김하늘" 꼴)
-function activeNames() {
-  return activeStudents().map((s) => (s.number ? `${s.number} ${s.name}` : s.name));
+function namesOf(gradeId, classId) {
+  return studentsOf(gradeId, classId).map((s) => (s.number ? `${s.number} ${s.name}` : s.name));
 }
 
-function fillClassSelects() {
-  const wrap = $("roster-class-wrap"), gSel = $("roster-grade"), cSel = $("roster-class");
+function fillOneClassSelect(wrapId, gradeId, classId) {
+  const wrap = $(wrapId), gSel = $(gradeId), cSel = $(classId);
   if (!wrap || !gSel || !cSel) return;
   if (!hasClasses()) { wrap.classList.add("hidden"); return; }
   wrap.classList.remove("hidden");
@@ -998,26 +1006,25 @@ function fillClassSelects() {
   cSel.innerHTML = classes.map((c) => `<option value="${c}">${c ? c + "반" : "반 미지정"}</option>`).join("");
   if (classes.includes(prevC)) cSel.value = prevC;
 }
+function fillClassSelects() {
+  for (const [w, g, c] of CARD_SELECTS) fillOneClassSelect(w, g, c);
+}
 
 function renderRosterCount() {
   const el = $("roster-count");
   if (!el) return;
   const total = allStudents().length;
   if (!total) { el.textContent = ""; return; }
-  if (!hasClasses()) { el.textContent = `${total}명`; return; }
-  el.textContent = `${activeStudents().length}명 / 전체 ${total}명`;
+  const classCount = new Set(allStudents().map((s) => `${s.grade}|${s.class}`)).size;
+  el.textContent = hasClasses() ? `${total}명 · ${classCount}개 학급` : `${total}명`;
 }
 // 명단이 바뀌면 이걸 부른다
 function refreshRoster() {
   fillClassSelects();
   renderRosterCount();
-  renderGroupResultReset();
+  renderGroupRoster();
   drawWheel();
   pickPool = []; pickSource = "";
-}
-function renderGroupResultReset() {
-  const el = $("group-result");
-  if (el && !lastGroups) el.innerHTML = "";
 }
 
 function uploadSummary() {
@@ -1255,7 +1262,7 @@ async function uploadRoster(file) {
 let pickPool = [], pickSource = "", pickHistory = [];
 
 function pickName() {
-  const names = activeNames();
+  const names = namesOf("picker-grade", "picker-class");
   if (!names.length) { toast("먼저 위쪽 명단을 올리거나 입력해 주세요"); return; }
   const noRepeat = $("picker-norepeat")?.checked;
   let name;
@@ -1296,28 +1303,73 @@ function resetPicker() {
 // ============================================================
 //  모둠 편성
 // ============================================================
-let groupSets = [], lastGroups = null;
+let groupSets = [], lastGroups = null, lastHasLeaders = false;
+
+// 모둠장으로 지명된 학생 id
+let groupLeaderIds = new Set();
+
+function renderGroupRoster() {
+  const box = $("group-roster");
+  if (!box) return;
+  const pool = studentsOf("group-grade", "group-class");
+  // 반이 바뀌어 명단에 없는 모둠장은 선택 해제
+  groupLeaderIds = new Set([...groupLeaderIds].filter((id) => pool.some((s) => s.id === id)));
+
+  if (!pool.length) {
+    box.innerHTML = '<p class="muted" style="margin:6px 0;">명단을 올리거나 입력하면 여기에 학생이 나옵니다.</p>';
+    return;
+  }
+  box.innerHTML =
+    '<p class="group-roster-hint muted">👑 모둠장이 될 학생을 눌러 선택하세요 — 선택한 수만큼 모둠이 만들어집니다 (선택하지 않으면 아래 모둠 수대로 나눕니다)</p>' +
+    '<div class="roster-chips">' +
+    pool.map((s) =>
+      `<button class="roster-chip${groupLeaderIds.has(s.id) ? " leader" : ""}" data-sid="${s.id}">` +
+      `${s.number ? `<b>${escapeHtml(s.number)}</b> ` : ""}${escapeHtml(s.name)}</button>`
+    ).join("") +
+    "</div>";
+}
 
 function makeGroups() {
-  const names = activeNames();
-  if (names.length < 2) { toast("이 학급에 2명 이상 있어야 모둠을 짤 수 있습니다"); return; }
-  const count = Math.max(2, Math.min(12, Number($("group-count")?.value) || 4));
-  if (count > names.length) { toast(`모둠 수(${count})가 인원(${names.length}명)보다 많습니다`); return; }
-  const pool = shuffled(names);
-  const groups = Array.from({ length: count }, () => []);
-  pool.forEach((n, i) => groups[i % count].push(n));
+  const pool = studentsOf("group-grade", "group-class");
+  if (pool.length < 2) { toast("이 학급에 2명 이상 있어야 모둠을 짤 수 있습니다"); return; }
+  const label = (s) => (s.number ? `${s.number} ${s.name}` : s.name);
+
+  const leaders = pool.filter((s) => groupLeaderIds.has(s.id));
+  let groups, caption, hasLeaders;
+
+  if (leaders.length) {
+    // 모둠장 지명 방식: 지명한 수만큼 모둠, 나머지는 무작위 라운드로빈
+    const rest = shuffled(pool.filter((s) => !groupLeaderIds.has(s.id)));
+    groups = leaders.map((l) => [label(l)]);
+    rest.forEach((s, i) => groups[i % groups.length].push(label(s)));
+    caption = `👑 모둠장 ${leaders.length}명 · 전체 ${pool.length}명 → ${groups.length}모둠`;
+    hasLeaders = true;
+  } else {
+    // 모둠장을 고르지 않았으면 모둠 수대로 균등 배분
+    const count = Math.max(2, Math.min(12, Number($("group-count")?.value) || 4));
+    if (count > pool.length) { toast(`모둠 수(${count})가 인원(${pool.length}명)보다 많습니다`); return; }
+    groups = Array.from({ length: count }, () => []);
+    shuffled(pool).forEach((s, i) => groups[i % count].push(label(s)));
+    caption = `🔀 ${pool.length}명 → ${count}모둠`;
+    hasLeaders = false;
+  }
+
   lastGroups = groups;
+  lastHasLeaders = hasLeaders;
   $("group-save-btn").disabled = false;
-  renderGroupResult(groups, `🔀 ${names.length}명 → ${count}모둠`);
+  renderGroupResult(groups, caption, hasLeaders);
 }
-function renderGroupResult(groups, caption) {
+function renderGroupResult(groups, caption, hasLeaders) {
   const el = $("group-result");
   if (!el) return;
   el.innerHTML =
     `<div class="group-caption muted">${escapeHtml(caption)}</div>` +
     groups.map((g, i) =>
       `<div class="group-box"><div class="group-box-head">${i + 1}모둠 (${g.length}명)</div>` +
-      g.map((n) => `<div class="group-member">${escapeHtml(n)}</div>`).join("") +
+      g.map((n, idx) => {
+        const lead = hasLeaders && idx === 0;
+        return `<div class="group-member${lead ? " is-leader" : ""}">${lead ? "👑 " : ""}${escapeHtml(n)}</div>`;
+      }).join("") +
       "</div>"
     ).join("");
 }
@@ -1339,7 +1391,7 @@ function saveCurrentGroups() {
   if (!lastGroups) { toast("먼저 모둠을 짜 주세요"); return; }
   const name = (prompt("저장할 이름", `모둠 ${groupSets.length + 1}`) || "").trim();
   if (!name) return;
-  groupSets.unshift({ id: uid(), name, date: todayStr(), groups: lastGroups });
+  groupSets.unshift({ id: uid(), name, date: todayStr(), groups: lastGroups, leaders: lastHasLeaders });
   if (groupSets.length > 40) groupSets.pop();
   saveGroupSets();
   toast(`💾 '${name}' 저장 (이 기기에만)`);
@@ -1349,8 +1401,9 @@ function loadGroupSet() {
   const set = groupSets.find((s) => s.id === id);
   if (!set) { toast("저장된 모둠이 없습니다"); return; }
   lastGroups = set.groups;
+  lastHasLeaders = !!set.leaders;
   $("group-save-btn").disabled = false;
-  renderGroupResult(set.groups, `📂 ${set.name} · ${set.date}`);
+  renderGroupResult(set.groups, `📂 ${set.name} · ${set.date}`, lastHasLeaders);
 }
 function deleteGroupSet() {
   const id = $("group-saved")?.value;
@@ -1443,7 +1496,7 @@ function renderSeating() {
 }
 function randomSeating() {
   readSeatingOpts();
-  const pool = activeNames();
+  const pool = namesOf("seating-grade", "seating-class");
   if (!pool.length) { toast("먼저 위쪽 명단을 올리거나 입력해 주세요"); return; }
   const seats = seating.rows * seating.cols;
   if (pool.length > seats) {
@@ -1498,7 +1551,7 @@ function printSeating() {
 function parseWheelItems() {
   const raw = ($("wheel-items")?.value || "").trim();
   if (raw) return [...new Set(raw.split(/[,\n]/).map((s) => s.trim()).filter(Boolean))].slice(0, 24);
-  return activeNames().slice(0, 24);
+  return namesOf("wheel-grade", "wheel-class").slice(0, 24);
 }
 
 // ============================================================
@@ -1521,6 +1574,13 @@ function toggleTheme() {
 // ============================================================
 function on(id, ev, fn) { const el = $(id); if (el) el.addEventListener(ev, fn); }
 
+// 어느 카드의 학급이 바뀌었는지에 따라 그 카드만 갱신
+function onCardClassChange(gradeId) {
+  if (gradeId === "group-grade") { groupLeaderIds = new Set(); renderGroupRoster(); }
+  if (gradeId === "picker-grade") { pickPool = []; pickSource = ""; }
+  if (gradeId === "wheel-grade") { const w = $("wheel-items"); if (w) w.value = ""; drawWheel(); }
+}
+
 function bindAll() {
   // 명단
   on("roster", "input", onRosterInput);
@@ -1528,8 +1588,20 @@ function bindAll() {
   on("roster-file", "change", (e) => uploadRoster(e.target.files?.[0]));
   on("roster-clear", "click", clearRoster);
   on("roster-numbers", "click", fillNumbers);
-  on("roster-grade", "change", () => { fillClassSelects(); lastGroups = null; refreshRoster(); });
-  on("roster-class", "change", () => { lastGroups = null; refreshRoster(); });
+  // 카드별 학년 바꾸면 그 카드의 반 목록 갱신
+  for (const [w, g, c] of CARD_SELECTS) {
+    on(g, "change", () => { fillOneClassSelect(w, g, c); onCardClassChange(g); });
+    on(c, "change", () => onCardClassChange(g));
+  }
+  // 모둠장 칩 선택
+  on("group-roster", "click", (e) => {
+    const chip = e.target.closest(".roster-chip");
+    if (!chip) return;
+    const id = chip.dataset.sid;
+    if (groupLeaderIds.has(id)) groupLeaderIds.delete(id);
+    else groupLeaderIds.add(id);
+    renderGroupRoster();
+  });
 
   // 타이머 · 스톱워치
   on("timer-start-btn", "click", startTimer);
@@ -1578,7 +1650,7 @@ function bindAll() {
   on("wheel-spin", "click", spinWheel);
   on("wheel-svg", "click", spinWheel);
   on("wheel-from-roster", "click", () => {
-    const names = activeNames();
+    const names = namesOf("wheel-grade", "wheel-class");
     if (!names.length) { toast("먼저 위쪽 명단을 올리거나 입력해 주세요"); return; }
     $("wheel-items").value = names.join(", ");
     drawWheel();
