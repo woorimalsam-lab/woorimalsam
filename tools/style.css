@@ -1305,3 +1305,24 @@ body {
 
 /* 명단 패널 입력창은 조금 넉넉하게 */
 #roster { min-height: 68px; }
+
+/* ---------- 명단 업로드 · 학급 선택 ---------- */
+.roster-status { font-size: 0.8rem; margin: 0 0 8px; min-height: 1.2em; line-height: 1.5; }
+.roster-status.is-error { color: var(--danger); }
+.roster-class-wrap { display: inline-flex; gap: 6px; margin-left: auto; }
+#roster-grade, #roster-class, #count-limit, #count-limit-custom {
+  padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
+  font-family: inherit; background: var(--panel); color: var(--ink);
+}
+#count-limit-custom { width: 90px; }
+[data-theme="dark"] #roster-grade, [data-theme="dark"] #roster-class,
+[data-theme="dark"] #count-limit, [data-theme="dark"] #count-limit-custom {
+  background: #1f2430; border-color: #2a2e38;
+}
+
+/* ---------- 글자 수 계산: 나이스 바이트 ---------- */
+.count-neis b { color: var(--primary); }
+.count-neis.is-over b, .count-left.is-over b, .count-left.is-over span { color: var(--danger); }
+.count-bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 4px 0 6px; }
+.count-bar span { display: block; height: 100%; background: var(--primary); transition: width 0.15s ease; }
+.count-bar span.is-over { background: var(--danger); }

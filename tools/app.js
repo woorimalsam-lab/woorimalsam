@@ -375,15 +375,56 @@ function pickWord() {
   $("word-remain").textContent = `남은 낱말 ${wordPool.length}개`;
 }
 
+// 나이스(NEIS) 바이트 계산: 한글·한자 등 1자 3byte, 영문·숫자·기호·공백 1byte, 줄바꿈 2byte
+function neisBytes(text) {
+  let bytes = 0;
+  for (const ch of String(text)) {
+    if (ch === "\r") continue;
+    if (ch === "\n") { bytes += 2; continue; }
+    bytes += ch.charCodeAt(0) > 127 ? 3 : 1;
+  }
+  return bytes;
+}
+function countLimit() {
+  const sel = $("count-limit")?.value ?? "1500";
+  if (sel === "custom") return Math.max(0, Number($("count-limit-custom")?.value) || 0);
+  return Math.max(0, Number(sel) || 0);
+}
 function renderCharCount() {
+  const custom = $("count-limit-custom");
+  if (custom) custom.classList.toggle("hidden", $("count-limit")?.value !== "custom");
+
   const text = $("count-text").value;
   const box = $("count-result");
   if (!text) { box.innerHTML = ""; return; }
+
   const withSpace = [...text.replace(/\r?\n/g, "")].length;
   const noSpace = [...text.replace(/\s/g, "")].length;
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
   const pages = Math.ceil(withSpace / 200) || 0;
-  box.innerHTML = `
+  const bytes = neisBytes(text);
+  const limit = countLimit();
+
+  let head;
+  if (limit) {
+    const left = limit - bytes;
+    const pct = Math.min(100, Math.round((bytes / limit) * 100));
+    const over = left < 0;
+    head = `
+      <div class="count-row count-neis${over ? " is-over" : ""}">
+        <span>나이스 바이트</span>
+        <b>${bytes.toLocaleString()} / ${limit.toLocaleString()} byte</b>
+      </div>
+      <div class="count-bar"><span style="width:${pct}%" class="${over ? "is-over" : ""}"></span></div>
+      <div class="count-row count-left${over ? " is-over" : ""}">
+        <span>${over ? "초과" : "남은 분량"}</span>
+        <b>${Math.abs(left).toLocaleString()} byte</b>
+      </div>`;
+  } else {
+    head = `<div class="count-row count-neis"><span>나이스 바이트</span><b>${bytes.toLocaleString()} byte</b></div>`;
+  }
+
+  box.innerHTML = head + `
     <div class="count-row"><span>공백 포함</span><b>${withSpace.toLocaleString()}자</b></div>
     <div class="count-row"><span>공백 제외</span><b>${noSpace.toLocaleString()}자</b></div>
     <div class="count-row"><span>어절 수</span><b>${words.toLocaleString()}개</b></div>
@@ -900,38 +941,312 @@ function toggleLiveVoice() { liveRunning() ? stopLiveVoice() : startLiveVoice();
 const LK_ROSTER    = "classtools.roster";
 const LK_GROUPSETS = "classtools.groupsets";
 const LK_SEATING   = "classtools.seating";
+const LK_UPLOAD    = "classtools.roster.upload";
+
+// ---- 명단 모델 -------------------------------------------------
+// 업로드한 명렬표는 {id,name,grade,class,number} 배열로, 직접 입력은 텍스트로 보관한다.
+// 둘 중 마지막에 쓴 쪽이 이긴다.
+let uploaded = [];   // [{id, name, grade, class, number}]
 
 function rosterNames() {
   const raw = $("roster")?.value || "";
   return [...new Set(raw.split(/[,\n\t]/).map((s) => s.trim()).filter(Boolean))];
 }
-function renderRosterCount() {
-  const n = rosterNames().length;
-  const el = $("roster-count");
-  if (el) el.textContent = n ? `${n}명` : "";
+// 명단 전체 (업로드 우선)
+function allStudents() {
+  if (uploaded.length) return uploaded;
+  return rosterNames().map((entry, i) => {
+    const m = /^(\d{1,3})\s*번?[.\s]\s*(.+)$/.exec(entry);   // "3 김하늘" / "3번 김하늘" / "3. 김하늘"
+    return m
+      ? { id: "r" + i, name: m[2].trim(), number: m[1], grade: "", class: "" }
+      : { id: "r" + i, name: entry, number: "", grade: "", class: "" };
+  });
 }
+function hasClasses() {
+  return uploaded.some((s) => s.grade || s.class);
+}
+// 지금 선택된 학급의 학생 (학급 구분이 없으면 전체) — 모든 도구가 이걸 쓴다
+function activeStudents() {
+  const pool = allStudents();
+  if (!hasClasses()) return pool;
+  const g = $("roster-grade")?.value ?? "", c = $("roster-class")?.value ?? "";
+  return pool
+    .filter((s) => (s.grade || "") === g && (s.class || "") === c)
+    .sort((a, b) => (Number(a.number) || 0) - (Number(b.number) || 0));
+}
+// 이름만 (번호가 있으면 "3 김하늘" 꼴)
+function activeNames() {
+  return activeStudents().map((s) => (s.number ? `${s.number} ${s.name}` : s.name));
+}
+
+function fillClassSelects() {
+  const wrap = $("roster-class-wrap"), gSel = $("roster-grade"), cSel = $("roster-class");
+  if (!wrap || !gSel || !cSel) return;
+  if (!hasClasses()) { wrap.classList.add("hidden"); return; }
+  wrap.classList.remove("hidden");
+
+  const pool = allStudents();
+  const grades = [...new Set(pool.map((s) => s.grade || ""))]
+    .sort((a, b) => (Number(a) || 99) - (Number(b) || 99));
+  const prevG = gSel.value;
+  gSel.innerHTML = grades.map((g) => `<option value="${g}">${g ? g + "학년" : "학년 미지정"}</option>`).join("");
+  if (grades.includes(prevG)) gSel.value = prevG;
+
+  const classes = [...new Set(pool.filter((s) => (s.grade || "") === gSel.value).map((s) => s.class || ""))]
+    .sort((a, b) => (Number(a) || 99) - (Number(b) || 99));
+  const prevC = cSel.value;
+  cSel.innerHTML = classes.map((c) => `<option value="${c}">${c ? c + "반" : "반 미지정"}</option>`).join("");
+  if (classes.includes(prevC)) cSel.value = prevC;
+}
+
+function renderRosterCount() {
+  const el = $("roster-count");
+  if (!el) return;
+  const total = allStudents().length;
+  if (!total) { el.textContent = ""; return; }
+  if (!hasClasses()) { el.textContent = `${total}명`; return; }
+  el.textContent = `${activeStudents().length}명 / 전체 ${total}명`;
+}
+// 명단이 바뀌면 이걸 부른다
+function refreshRoster() {
+  fillClassSelects();
+  renderRosterCount();
+  renderGroupResultReset();
+  drawWheel();
+  pickPool = []; pickSource = "";
+}
+function renderGroupResultReset() {
+  const el = $("group-result");
+  if (el && !lastGroups) el.innerHTML = "";
+}
+
+function uploadSummary() {
+  const byClass = new Map();
+  for (const s of uploaded) {
+    const key = `${s.grade || ""}|${s.class || ""}`;
+    byClass.set(key, (byClass.get(key) || 0) + 1);
+  }
+  return [...byClass.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "ko", { numeric: true }))
+    .map(([key, n]) => {
+      const [g, c] = key.split("|");
+      const label = `${g ? g + "학년 " : ""}${c ? c + "반" : ""}`.trim();
+      return `${label || "반 미지정"} ${n}명`;
+    })
+    .join(" · ");
+}
+
 function loadRoster() {
   const saved = loadLocal(LK_ROSTER);
   if (typeof saved === "string" && $("roster")) $("roster").value = saved;
-  renderRosterCount();
+  const u = loadLocal(LK_UPLOAD);
+  uploaded = Array.isArray(u) ? u.filter((s) => s && s.name) : [];
+  if (uploaded.length) rosterStatus(`📋 올린 명단: ${uploadSummary()}`);
+  refreshRoster();
 }
-function saveRoster() {
+function saveRosterText() {
   saveLocal(LK_ROSTER, $("roster")?.value || "");
+}
+let rosterTimer = null;
+function onRosterInput() {
+  // 직접 입력을 시작하면 업로드한 명단은 물러난다
+  if (uploaded.length && ($("roster")?.value || "").trim()) {
+    uploaded = [];
+    saveLocal(LK_UPLOAD, []);
+    rosterStatus("직접 입력한 명단을 사용합니다");
+  }
   renderRosterCount();
-  toast(`💾 명단 ${rosterNames().length}명 저장 (이 기기에만)`);
+  clearTimeout(rosterTimer);
+  rosterTimer = setTimeout(() => { saveRosterText(); refreshRoster(); }, 600);
 }
 function clearRoster() {
   if (!confirm("명단을 지울까요?")) return;
   $("roster").value = "";
   saveLocal(LK_ROSTER, "");
-  renderRosterCount();
+  uploaded = [];
+  saveLocal(LK_UPLOAD, []);
+  rosterStatus("");
+  refreshRoster();
 }
 function fillNumbers() {
   const n = Number(prompt("몇 번까지 채울까요?", "30"));
   if (!n || n < 1 || n > 60) return;
+  uploaded = [];
+  saveLocal(LK_UPLOAD, []);
   $("roster").value = Array.from({ length: n }, (_, i) => `${i + 1}번`).join(", ");
-  saveLocal(LK_ROSTER, $("roster").value);
-  renderRosterCount();
+  saveRosterText();
+  rosterStatus("");
+  refreshRoster();
+}
+function rosterStatus(msg, bad) {
+  const el = $("roster-status");
+  if (!el) { if (msg) toast(msg); return; }
+  el.textContent = msg;
+  el.classList.toggle("is-error", !!bad);
+}
+
+// ---- 명렬표 파일 읽기 -------------------------------------------
+// SheetJS는 .xlsx를 올릴 때만 내려받는다 (안 올리면 외부 요청이 아예 없다)
+const XLSX_SOURCES = [
+  "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js",
+  "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+];
+function ensureXLSX() {
+  if (typeof XLSX !== "undefined") return Promise.resolve();
+  const tryOne = (i) => new Promise((resolve, reject) => {
+    if (i >= XLSX_SOURCES.length) { reject(new Error("엑셀 라이브러리를 불러오지 못했습니다. .csv로 저장해 올려 주세요.")); return; }
+    const sc = document.createElement("script");
+    sc.src = XLSX_SOURCES[i];
+    sc.onload = () => resolve();
+    sc.onerror = () => { sc.remove(); tryOne(i + 1).then(resolve, reject); };
+    document.head.appendChild(sc);
+  });
+  return tryOne(0);
+}
+function cellStr(v) {
+  if (v == null) return "";
+  if (typeof v === "number") return Number.isInteger(v) ? String(v) : String(v).replace(/\.0+$/, "");
+  return String(v).trim();
+}
+// 명렬표 행들을 훑어 학생 목록을 뽑는다 (본앱 parseNEISData와 같은 규칙)
+function scanRosterRows(data) {
+  if (!Array.isArray(data) || !data.length) return { ok: false, list: [], msg: "파일이 비어있습니다" };
+
+  let headerRow = -1, classIdx = -1, numberIdx = -1, nameIdx = -1, gradeIdx = -1;
+  const scanMax = Math.min(data.length, 30);
+  for (let r = 0; r < scanMax; r++) {
+    const row = data[r] || [];
+    let cI = -1, nI = -1, nmI = -1, gI = -1;
+    for (let i = 0; i < row.length; i++) {
+      const h = cellStr(row[i]).replace(/\s+/g, "").toLowerCase();
+      if (!h) continue;
+      if (h === "반" || h === "class") cI = i;
+      if (h === "번호" || h === "번" || h === "no" || h === "number") nI = i;
+      if (h === "성명" || h === "이름" || h === "name") nmI = i;
+      if (h === "학년" || h === "grade") gI = i;
+    }
+    if (nmI !== -1) { headerRow = r; classIdx = cI; numberIdx = nI; nameIdx = nmI; gradeIdx = gI; break; }
+  }
+
+  let fallbackClass = "", fallbackGrade = "";
+  const titleScan = headerRow > 0 ? headerRow : Math.min(data.length, 10);
+  for (let r = 0; r < titleScan; r++) {
+    const joined = (data[r] || []).map((v) => String(v ?? "")).join(" ");
+    const m = /(\d{1,2})\s*학년\s*(\d{1,2})\s*반/.exec(joined) || /(\d{1,2})\s*-\s*(\d{1,2})/.exec(joined);
+    if (m) { fallbackGrade = m[1]; fallbackClass = m[2]; break; }
+  }
+
+  const list = [];
+  const add = (name, klass, number, grade) => {
+    name = (name || "").trim();
+    if (!name || /^\d+$/.test(name)) return;
+    list.push({
+      name,
+      class: (klass || "").replace(/반$/, ""),
+      number: (number || "").replace(/번$/, ""),
+      grade: (grade || "").replace(/학년$/, ""),
+    });
+  };
+
+  // 사진명렬표 형식: "1번 강건" 같은 셀이 흩어져 있음
+  if (headerRow === -1) {
+    const found = [];
+    for (const row of data) {
+      for (const cell of row || []) {
+        const m = /^(\d{1,3})\s*번\s*(.+)$/.exec(String(cell ?? "").trim());
+        if (m && m[2].trim() && !/^\d+$/.test(m[2].trim())) found.push({ number: m[1], name: m[2].trim() });
+      }
+    }
+    if (found.length >= 3) {
+      for (const f of found) add(f.name, fallbackClass, f.number, fallbackGrade);
+      return { ok: true, list, msg: "" };
+    }
+  }
+
+  for (let i = headerRow + 1; i < data.length; i++) {
+    const row = (data[i] || []).map(cellStr);
+    if (!row.some(Boolean)) continue;
+    let name, klass, number, grade;
+    if (nameIdx !== -1) {
+      name = row[nameIdx] || "";
+      klass = (classIdx !== -1 ? row[classIdx] : "") || fallbackClass;
+      number = numberIdx !== -1 ? row[numberIdx] : "";
+      grade = (gradeIdx !== -1 ? row[gradeIdx] : "") || fallbackGrade;
+    } else {
+      const vals = row.filter(Boolean);
+      if (vals.length >= 3) [klass, number, name] = vals;
+      else if (vals.length === 2) { [number, name] = vals; klass = fallbackClass; }
+      else { name = vals[0] || ""; klass = fallbackClass; number = ""; }
+      grade = fallbackGrade;
+    }
+    add(name, klass, number, grade);
+  }
+
+  return list.length
+    ? { ok: true, list, msg: "" }
+    : { ok: false, list, msg: "학생 데이터를 찾지 못했습니다. 파일 형식을 확인해 주세요." };
+}
+
+async function readRosterFile(file) {
+  const lower = file.name.toLowerCase();
+  const isExcel = lower.endsWith(".xlsx") || lower.endsWith(".xls");
+  if (isExcel) await ensureXLSX();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("파일을 읽지 못했습니다"));
+    reader.onload = (e) => {
+      try {
+        if (isExcel) {
+          const wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          resolve(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }));
+        } else {
+          const lines = String(e.target.result).split(/\r?\n/).filter((l) => l.trim());
+          resolve(lines.map((l) => l.split(",")));
+        }
+      } catch (err) { reject(err); }
+    };
+    if (isExcel) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
+  });
+}
+
+async function uploadRoster(file) {
+  if (!file) return;
+  rosterStatus("파일을 읽는 중…");
+  try {
+    const rows = await readRosterFile(file);
+    const scan = scanRosterRows(rows);
+    if (!scan.ok) { rosterStatus(scan.msg, true); return; }
+
+    const seen = new Set();
+    const list = [];
+    for (const s of scan.list) {
+      const key = `${s.grade}|${s.class}|${s.number}|${s.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      list.push({ id: "u" + list.length, name: s.name, grade: s.grade || "", class: s.class || "", number: s.number || "" });
+    }
+
+    const had = allStudents().length;
+    if (had && !confirm(`현재 명단 ${had}명을 새로 읽은 ${list.length}명으로 바꿀까요?`)) {
+      rosterStatus("취소했습니다 — 명단은 그대로입니다");
+      return;
+    }
+    uploaded = list;
+    saveLocal(LK_UPLOAD, uploaded);
+    $("roster").value = "";
+    saveLocal(LK_ROSTER, "");
+    lastGroups = null;
+    refreshRoster();
+    rosterStatus(`✅ ${list.length}명을 불러왔습니다 — ${uploadSummary()} · 이 기기에만 저장됩니다`);
+  } catch (e) {
+    console.error(e);
+    rosterStatus(e?.message || "파일을 읽지 못했습니다. .xlsx 또는 .csv인지 확인해 주세요.", true);
+  } finally {
+    const input = $("roster-file");
+    if (input) input.value = "";
+  }
 }
 
 // ============================================================
@@ -940,8 +1255,8 @@ function fillNumbers() {
 let pickPool = [], pickSource = "", pickHistory = [];
 
 function pickName() {
-  const names = rosterNames();
-  if (!names.length) { toast("먼저 위쪽 명단에 이름을 입력해 주세요"); return; }
+  const names = activeNames();
+  if (!names.length) { toast("먼저 위쪽 명단을 올리거나 입력해 주세요"); return; }
   const noRepeat = $("picker-norepeat")?.checked;
   let name;
   if (noRepeat) {
@@ -984,8 +1299,8 @@ function resetPicker() {
 let groupSets = [], lastGroups = null;
 
 function makeGroups() {
-  const names = rosterNames();
-  if (names.length < 2) { toast("먼저 위쪽 명단에 2명 이상 입력해 주세요"); return; }
+  const names = activeNames();
+  if (names.length < 2) { toast("이 학급에 2명 이상 있어야 모둠을 짤 수 있습니다"); return; }
   const count = Math.max(2, Math.min(12, Number($("group-count")?.value) || 4));
   if (count > names.length) { toast(`모둠 수(${count})가 인원(${names.length}명)보다 많습니다`); return; }
   const pool = shuffled(names);
@@ -1128,8 +1443,8 @@ function renderSeating() {
 }
 function randomSeating() {
   readSeatingOpts();
-  const pool = rosterNames();
-  if (!pool.length) { toast("먼저 위쪽 명단에 이름을 입력해 주세요"); return; }
+  const pool = activeNames();
+  if (!pool.length) { toast("먼저 위쪽 명단을 올리거나 입력해 주세요"); return; }
   const seats = seating.rows * seating.cols;
   if (pool.length > seats) {
     toast(`좌석(${seats}석)보다 인원(${pool.length}명)이 많습니다. 행·열을 늘려 주세요.`, 5000);
@@ -1183,7 +1498,7 @@ function printSeating() {
 function parseWheelItems() {
   const raw = ($("wheel-items")?.value || "").trim();
   if (raw) return [...new Set(raw.split(/[,\n]/).map((s) => s.trim()).filter(Boolean))].slice(0, 24);
-  return rosterNames().slice(0, 24);
+  return activeNames().slice(0, 24);
 }
 
 // ============================================================
@@ -1208,10 +1523,13 @@ function on(id, ev, fn) { const el = $(id); if (el) el.addEventListener(ev, fn);
 
 function bindAll() {
   // 명단
-  on("roster", "input", renderRosterCount);
-  on("roster-save", "click", saveRoster);
+  on("roster", "input", onRosterInput);
+  on("roster-upload", "click", () => $("roster-file")?.click());
+  on("roster-file", "change", (e) => uploadRoster(e.target.files?.[0]));
   on("roster-clear", "click", clearRoster);
   on("roster-numbers", "click", fillNumbers);
+  on("roster-grade", "change", () => { fillClassSelects(); lastGroups = null; refreshRoster(); });
+  on("roster-class", "change", () => { lastGroups = null; refreshRoster(); });
 
   // 타이머 · 스톱워치
   on("timer-start-btn", "click", startTimer);
@@ -1260,8 +1578,8 @@ function bindAll() {
   on("wheel-spin", "click", spinWheel);
   on("wheel-svg", "click", spinWheel);
   on("wheel-from-roster", "click", () => {
-    const names = rosterNames();
-    if (!names.length) { toast("먼저 위쪽 명단에 이름을 입력해 주세요"); return; }
+    const names = activeNames();
+    if (!names.length) { toast("먼저 위쪽 명단을 올리거나 입력해 주세요"); return; }
     $("wheel-items").value = names.join(", ");
     drawWheel();
   });
@@ -1275,6 +1593,8 @@ function bindAll() {
     if (b) castVote(Number(b.dataset.vote));
   });
   on("count-text", "input", renderCharCount);
+  on("count-limit", "change", renderCharCount);
+  on("count-limit-custom", "input", renderCharCount);
 
   // 소음 · 녹음 · 실시간 변조
   on("noise-toggle", "click", toggleNoise);
