@@ -1596,7 +1596,6 @@ function bindEvents() {
   });
 
   $("login-btn").addEventListener("click", login);
-  $("guest-login-btn")?.addEventListener("click", login);
   $("guest-unlock")?.addEventListener("click", guestUnlock);
   $("guest-roster")?.addEventListener("input", onGuestRosterInput);
   $("guest-roster-upload")?.addEventListener("click", () => $("guest-roster-file")?.click());
@@ -3497,7 +3496,6 @@ function applyAuthGate() {
   $("guest-other-account")?.classList.toggle("hidden", !other);
   const otherEmail = $("guest-other-email");
   if (otherEmail && other) otherEmail.textContent = state.user.email || "";
-  $("guest-login-btn")?.classList.toggle("hidden", !!state.user);
   $("tabbar")?.querySelectorAll(".navbtn").forEach((b) => {
     b.classList.toggle("hidden", locked && b.dataset.view !== "tools");
   });
