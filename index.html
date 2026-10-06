@@ -349,7 +349,11 @@
         <div id="guest-roster-status" class="guest-roster-status muted"></div>
         <textarea id="guest-roster" rows="4" class="tool-textarea"
           placeholder="파일을 올리거나, 여기에 직접 입력해도 됩니다 (입력하면 자동 저장)&#10;예: 김민준, 이서연, 박지호&#10;번호를 붙이려면: 1 김민준"></textarea>
-        <p class="guest-unlock-hint muted">
+        <p id="guest-other-account" class="guest-other muted hidden">
+          🔒 <b id="guest-other-email"></b> 계정으로 로그인했습니다.
+          이 계정으로는 <b>도구만</b> 사용할 수 있습니다.
+        </p>
+        <p id="guest-unlock-hint" class="guest-unlock-hint muted">
           이 기기에 저장해 둔 내 자료를 로그인 없이 보려면
           <button id="guest-unlock" class="linklike">여기를 누르세요</button>.
         </p>
@@ -457,9 +461,25 @@
         </div>
 
         <div class="tool-card">
-          <h3>📏 글자 수·원고지</h3>
+          <h3>📏 글자 수 계산 <span class="muted" style="font-weight:400;font-size:0.75rem;">나이스 바이트</span></h3>
           <textarea id="count-text" rows="5" class="tool-textarea" placeholder="글을 붙여넣으면 바로 계산됩니다"></textarea>
+          <div class="tool-row">
+            <label class="tool-check">기준
+              <select id="count-limit">
+                <option value="1500">500자 (1,500 byte)</option>
+                <option value="2100">700자 (2,100 byte)</option>
+                <option value="3000">1,000자 (3,000 byte)</option>
+                <option value="custom">직접 입력</option>
+                <option value="0">제한 없음</option>
+              </select>
+            </label>
+            <input id="count-limit-custom" type="number" class="hidden" min="1" max="99999" value="1500" title="제한 바이트" />
+          </div>
           <div id="count-result" class="count-result"></div>
+          <p class="muted" style="font-size:0.72rem; margin:8px 0 0; line-height:1.6;">
+            나이스 기준 — 한글·한자 1자 <b>3byte</b>, 영문·숫자·기호·공백 1자 <b>1byte</b>, 줄바꿈 <b>2byte</b>.
+            입력 제한은 학교급·항목·연도에 따라 다르니 기준값을 확인해 주세요.
+          </p>
         </div>
 
         <div class="tool-card">

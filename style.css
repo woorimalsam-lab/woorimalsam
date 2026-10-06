@@ -1299,9 +1299,33 @@ body {
   color: var(--primary); font-family: inherit; font-size: inherit;
   text-decoration: underline; cursor: pointer;
 }
-/* 게스트일 때는 학년·반 드롭다운을 감춘다 (학급 이름 노출 방지) */
+/* 게스트: 내 학급 이름이 새지 않도록 기본은 감추고,
+   올린 명렬표에 학년·반이 있을 때만(body.guest-hasclass) 보여 준다 */
 body.guest #picker-grade, body.guest #picker-class,
 body.guest #group-grade, body.guest #group-class,
 body.guest #wheel-grade, body.guest #wheel-class { display: none; }
+body.guest.guest-hasclass #picker-grade, body.guest.guest-hasclass #picker-class,
+body.guest.guest-hasclass #group-grade, body.guest.guest-hasclass #group-class,
+body.guest.guest-hasclass #wheel-grade, body.guest.guest-hasclass #wheel-class { display: block; }
 .guest-roster-status { font-size: 0.8rem; margin: 0 0 8px; min-height: 1.2em; line-height: 1.5; }
 .guest-roster-status.is-error { color: var(--danger); }
+
+/* ---------- 글자 수 계산: 나이스 바이트 ---------- */
+.count-neis b { color: var(--primary); }
+.count-neis.is-over b, .count-left.is-over b, .count-left.is-over span { color: var(--danger); }
+.count-bar {
+  height: 8px; border-radius: 999px; background: var(--line);
+  overflow: hidden; margin: 4px 0 6px;
+}
+.count-bar span {
+  display: block; height: 100%; background: var(--primary);
+  transition: width 0.15s ease;
+}
+.count-bar span.is-over { background: var(--danger); }
+#count-limit, #count-limit-custom {
+  padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px;
+  font-family: inherit; background: var(--panel); color: var(--ink);
+}
+#count-limit-custom { width: 90px; }
+[data-theme="dark"] #count-limit, [data-theme="dark"] #count-limit-custom { background: #1f2430; border-color: #2a2e38; }
+.guest-other { margin: 10px 0 0; font-size: 0.82rem; line-height: 1.6; }

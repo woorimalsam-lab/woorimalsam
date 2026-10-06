@@ -951,7 +951,17 @@ async function initFirebase() {
   authMod.onAuthStateChanged(auth, async (user) => {
     state.user = user || null;
     updateAccountUI();
-    if (user) {
+    if (user && !isOwner()) {
+      // 허용되지 않은 계정: 어떤 구독도, 어떤 업로드도 하지 않는다.
+      // (이 기기의 로컬 자료가 남의 계정 클라우드로 올라가는 것을 막는 핵심 분기)
+      state.synced = false;
+      migrationChecked = true;   // 업로드 제안이 뜨지 않도록
+      if (memoUnsub) { memoUnsub(); memoUnsub = null; }
+      if (eventsUnsub) { eventsUnsub(); eventsUnsub = null; }
+      if (todosUnsub) { todosUnsub(); todosUnsub = null; }
+      unsubscribeState();
+      clearPersonalStateInMemory();
+    } else if (user) {
       state.synced = true;
       subscribeMemos();
       subscribeEvents();
@@ -1108,7 +1118,13 @@ async function logout() {
 
 function updateAccountUI() {
   const badge = $("mode-badge");
-  if (state.user) {
+  if (state.user && !isOwner()) {
+    $("user-name").textContent = state.user.email || "";
+    $("login-btn").classList.add("hidden");
+    $("logout-btn").classList.remove("hidden");
+    badge.textContent = "도구만 사용 가능";
+    badge.classList.remove("synced");
+  } else if (state.user) {
     $("user-name").textContent = state.user.displayName || state.user.email || "";
     $("login-btn").classList.add("hidden");
     $("logout-btn").classList.remove("hidden");
@@ -1332,6 +1348,7 @@ function syncRegistry() {
 // 로컬 변경을 클라우드로 (해당 키 문서 덮어쓰기)
 function cloudSet(key, data) {
   if (!(state.synced && fb) || applyingRemote) return;
+  if (!isOwner()) return;   // 다른 계정으로는 절대 올리지 않는다
   try {
     const { doc, setDoc, serverTimestamp } = fb.fs;
     setDoc(doc(fb.db, "users", state.user.uid, "state", key), { json: JSON.stringify(data), at: serverTimestamp() });
@@ -3225,6 +3242,7 @@ function classesOfGrade(grade) {
 }
 // 학년 select + 그 학년의 학급 select 채우기 (선택값 유지)
 function fillGradeClassSelects(gradeId, classId) {
+  if (appLocked()) return fillGuestClassSelects(gradeId, classId);   // 게스트는 올린 명렬표 기준
   const gSel = $(gradeId), cSel = $(classId);
   if (!gSel || !cSel) return;
   if (!state.students.length) {
@@ -3252,23 +3270,101 @@ const LOCAL_GUEST_ROSTER_KEY = "myplanner.guestroster";
 const SESSION_UNLOCK_KEY = "myplanner.unlocked";
 let guestUnlocked = false;
 
-// 잠금 조건: Firebase를 쓰는 배포본인데 로그인하지 않았고, 수동 해제도 안 한 상태
+// 이 앱의 개인 자료를 볼 수 있는 계정 (여기 없는 계정은 '도구'만 사용)
+const OWNER_EMAILS = ["woorimalsam@gmail.com"];
+function isOwner() {
+  const email = (state.user?.email || "").trim().toLowerCase();
+  return !!email && OWNER_EMAILS.includes(email);
+}
+// 잠금 조건: Firebase를 쓰는 배포본인데 소유자로 로그인하지 않았고, 수동 해제도 안 한 상태
 function appLocked() {
-  return isConfigured && !state.user && !guestUnlocked;
+  return isConfigured && !isOwner() && !guestUnlocked;
+}
+// 다른 계정으로 로그인한 상태인가 (잠금 해제 링크를 숨기는 조건)
+function signedInAsOther() {
+  return !!state.user && !isOwner();
+}
+// 다른 계정이 로그인했을 때 메모리에 남은 개인 자료를 비운다 (localStorage는 건드리지 않음)
+function clearPersonalStateInMemory() {
+  state.memos = [];
+  state.allEvents = [];
+  state.todos = [];
+  state.students = [];
+  state.seating = { rows: 5, cols: 6, currentClass: "all", grids: {}, pair: 2, view: "teacher" };
+  observations = {};
+  attendance = {};
+  progress = {};
+  pickLog = {};
+  groupSets = groupSets.filter((g) => g.guest);   // 내 모둠 저장본은 메모리에서 제거
 }
 
 function guestRosterNames() {
   const raw = $("guest-roster")?.value || "";
   return [...new Set(raw.split(/[,\n\t]/).map((s) => s.trim()).filter(Boolean))];
 }
+// 업로드한 명렬표(학년·반·번호 포함). 직접 입력보다 우선한다.
+const LOCAL_GUEST_UPLOAD_KEY = "myplanner.guestroster.upload";
+let guestUploaded = [];   // [{id, name, grade, class, number}]
+
+function loadGuestUpload() {
+  const u = loadLocal(LOCAL_GUEST_UPLOAD_KEY);
+  guestUploaded = Array.isArray(u) ? u.filter((s) => s && s.name) : [];
+}
+function saveGuestUpload() {
+  saveLocal(LOCAL_GUEST_UPLOAD_KEY, guestUploaded);
+}
+
 // toolStudents가 기대하는 모양({id, name, number, grade, class})으로 맞춰 준다
 function guestRosterStudents() {
+  if (guestUploaded.length) return guestUploaded;
   return guestRosterNames().map((entry, i) => {
     const m = /^(\d{1,3})\s*번?[.\s]\s*(.+)$/.exec(entry);   // "3 김하늘" / "3번 김하늘" / "3. 김하늘"
     return m
       ? { id: "g" + i, name: m[2].trim(), number: m[1], grade: "", class: "" }
       : { id: "g" + i, name: entry, number: "", grade: "", class: "" };
   });
+}
+// 업로드 명단에 학년·반 구분이 있는가
+function guestHasClasses() {
+  return guestUploaded.some((s) => s.grade || s.class);
+}
+// 게스트 명단에서 학년·반 select를 채운다 (선택값 유지)
+function fillGuestClassSelects(gradeId, classId) {
+  const gSel = $(gradeId), cSel = $(classId);
+  if (!gSel || !cSel) return;
+  const pool = guestRosterStudents();
+  if (!pool.length || !guestHasClasses()) {
+    gSel.innerHTML = "";
+    cSel.innerHTML = "";
+    return;
+  }
+  const grades = [...new Set(pool.map((s) => s.grade || ""))]
+    .sort((a, b) => (Number(a) || 99) - (Number(b) || 99));
+  const prevG = gSel.value;
+  gSel.innerHTML = grades.map((g) => `<option value="${g}">${g ? g + "학년" : "학년 미지정"}</option>`).join("");
+  if (grades.includes(prevG)) gSel.value = prevG;
+
+  const classes = [...new Set(pool.filter((s) => (s.grade || "") === gSel.value).map((s) => s.class || ""))]
+    .sort((a, b) => (Number(a) || 99) - (Number(b) || 99));
+  const prevC = cSel.value;
+  cSel.innerHTML = classes.map((c) => `<option value="${c}">${c ? c + "반" : "반 미지정"}</option>`).join("");
+  if (classes.includes(prevC)) cSel.value = prevC;
+}
+// 업로드 결과 요약: "2학년 8반 24명 · 2학년 9반 25명"
+function guestUploadSummary() {
+  const byClass = new Map();
+  for (const s of guestUploaded) {
+    const key = `${s.grade || ""}|${s.class || ""}`;
+    byClass.set(key, (byClass.get(key) || 0) + 1);
+  }
+  return [...byClass.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "ko", { numeric: true }))
+    .map(([key, n]) => {
+      const [g, c] = key.split("|");
+      const label = `${g ? g + "학년 " : ""}${c ? c + "반" : ""}`.trim();
+      return `${label || "반 미지정"} ${n}명`;
+    })
+    .join(" · ");
 }
 
 // 명렬표 파일(.xlsx/.xls/.csv)을 올려 게스트 명단을 채운다.
@@ -3286,26 +3382,32 @@ async function uploadGuestRoster(file) {
     const rows = await readRosterFile(file);
     const scan = scanRosterRows(rows);
     if (!scan.ok) { say(scan.msg, true); return; }
-    // 같은 이름+번호는 한 번만
+    // 같은 학급의 같은 이름+번호는 한 번만
     const seen = new Set();
     const lines = [];
     for (const s of scan.list) {
-      const key = `${s.number}|${s.name}`;
+      const key = `${s.grade}|${s.class}|${s.number}|${s.name}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      lines.push(s.number ? `${s.number} ${s.name}` : s.name);
+      lines.push({
+        id: "gu" + lines.length, name: s.name,
+        grade: s.grade || "", class: s.class || "", number: s.number || "",
+      });
     }
     // 엉뚱한 파일이 기존 명단을 말없이 덮어쓰지 않도록 확인
-    const had = guestRosterNames().length;
+    const had = guestRosterStudents().length;
     if (had && !confirm(`현재 명단 ${had}명을 새로 읽은 ${lines.length}명으로 바꿀까요?`)) {
       say("취소했습니다 — 명단은 그대로입니다");
       return;
     }
-    $("guest-roster").value = lines.join("\n");
-    saveLocal(LOCAL_GUEST_ROSTER_KEY, $("guest-roster").value);
+    guestUploaded = lines;
+    saveGuestUpload();
+    $("guest-roster").value = "";                      // 업로드가 직접 입력보다 우선
+    saveLocal(LOCAL_GUEST_ROSTER_KEY, "");
     renderGuestRosterCount();
     renderToolClassSelects();
-    say(`✅ ${lines.length}명을 불러왔습니다 — 이 기기에만 저장됩니다`);
+    const summary = guestUploadSummary();
+    say(`✅ ${lines.length}명을 불러왔습니다 — ${summary} · 이 기기에만 저장됩니다`);
   } catch (e) {
     console.error(e);
     say(e?.message || "파일을 읽지 못했습니다. .xlsx 또는 .csv인지 확인해 주세요.", true);
@@ -3317,12 +3419,21 @@ async function uploadGuestRoster(file) {
 function renderGuestRosterCount() {
   const el = $("guest-roster-count");
   if (!el) return;
-  const n = guestRosterNames().length;
-  el.textContent = n ? `${n}명` : "";
+  const n = guestRosterStudents().length;
+  const cls = guestUploaded.length && guestHasClasses()
+    ? ` · ${new Set(guestUploaded.map((s) => `${s.grade}|${s.class}`)).size}개 학급`
+    : "";
+  el.textContent = n ? `${n}명${cls}` : "";
 }
 function loadGuestRoster() {
   const saved = loadLocal(LOCAL_GUEST_ROSTER_KEY);
   if (typeof saved === "string" && $("guest-roster")) $("guest-roster").value = saved;
+  loadGuestUpload();
+  document.body.classList.toggle("guest-hasclass", guestHasClasses());
+  if (guestUploaded.length) {
+    const st = $("guest-roster-status");
+    if (st) st.textContent = `📋 올린 명단: ${guestUploadSummary()}`;
+  }
   renderGuestRosterCount();
 }
 let guestRosterTimer = null;
@@ -3333,6 +3444,14 @@ function saveGuestRoster() {
   renderToolClassSelects();
 }
 function onGuestRosterInput() {
+  // 직접 입력을 시작하면 업로드한 명단은 물러난다 (마지막에 쓴 쪽이 이김)
+  if (guestUploaded.length && ($("guest-roster")?.value || "").trim()) {
+    guestUploaded = [];
+    saveGuestUpload();
+    document.body.classList.remove("guest-hasclass");
+    const st = $("guest-roster-status");
+    if (st) { st.textContent = "직접 입력한 명단을 사용합니다"; st.classList.remove("is-error"); }
+  }
   renderGuestRosterCount();
   clearTimeout(guestRosterTimer);
   guestRosterTimer = setTimeout(saveGuestRoster, 600);
@@ -3341,6 +3460,9 @@ function clearGuestRoster() {
   if (!confirm("명단을 지울까요?")) return;
   $("guest-roster").value = "";
   saveLocal(LOCAL_GUEST_ROSTER_KEY, "");
+  guestUploaded = [];
+  saveGuestUpload();
+  document.body.classList.remove("guest-hasclass");
   renderGuestRosterCount();
   renderToolClassSelects();
   const status = $("guest-roster-status");
@@ -3369,6 +3491,13 @@ function applyAuthGate() {
   const brandIcon = document.querySelector(".brand");
   if (brandIcon) brandIcon.firstChild.nodeValue = locked ? "🛠️ " : "📌 ";
   $("guest-box")?.classList.toggle("hidden", !locked);
+  // 다른 계정으로 로그인한 상태라면 '로그인 없이 보기' 탈출구를 숨긴다
+  const other = signedInAsOther();
+  $("guest-unlock-hint")?.classList.toggle("hidden", other);
+  $("guest-other-account")?.classList.toggle("hidden", !other);
+  const otherEmail = $("guest-other-email");
+  if (otherEmail && other) otherEmail.textContent = state.user.email || "";
+  $("guest-login-btn")?.classList.toggle("hidden", !!state.user);
   $("tabbar")?.querySelectorAll(".navbtn").forEach((b) => {
     b.classList.toggle("hidden", locked && b.dataset.view !== "tools");
   });
@@ -3377,7 +3506,15 @@ function applyAuthGate() {
 }
 
 function toolStudents(gradeId, classId) {
-  if (appLocked()) return guestRosterStudents();   // 비로그인: 내 학생 명단 대신 게스트 명단
+  if (appLocked()) {
+    // 비로그인: 내 학생 명단 대신 게스트 명단. 학년·반 정보가 있으면 선택한 학급만.
+    const pool = guestRosterStudents();
+    if (!guestHasClasses()) return pool;
+    const g = $(gradeId)?.value ?? "", c = $(classId)?.value ?? "";
+    return pool
+      .filter((s) => (s.grade || "") === g && (s.class || "") === c)
+      .sort((a, b) => (Number(a.number) || 0) - (Number(b.number) || 0));
+  }
   const g = $(gradeId)?.value ?? "", c = $(classId)?.value ?? "";
   if (!state.students.length) return [];
   return state.students
@@ -3386,10 +3523,11 @@ function toolStudents(gradeId, classId) {
 }
 function renderToolClassSelects() {
   if (appLocked()) {
-    // 게스트: 학년·반 드롭다운은 비우고(= 학급 이름 노출 방지) 게스트 명단으로만 동작
-    for (const id of ["picker-grade", "picker-class", "group-grade", "group-class", "wheel-grade", "wheel-class"]) {
-      const el = $(id); if (el) el.innerHTML = "";
-    }
+    // 게스트: 내 학급이 아니라 올린 명렬표의 학년·반으로 채운다
+    fillGuestClassSelects("picker-grade", "picker-class");
+    fillGuestClassSelects("group-grade", "group-class");
+    fillGuestClassSelects("wheel-grade", "wheel-class");
+    document.body.classList.toggle("guest-hasclass", guestHasClasses());
     renderGroupRoster();
     renderGroupSets();
     renderPickerHistory();
@@ -4205,15 +4343,57 @@ function pickWord() {
 }
 
 // ---------- 글자 수·원고지 ----------
+// 나이스(NEIS) 바이트 계산: 한글·한자 등 1자 3byte, 영문·숫자·기호·공백 1byte, 줄바꿈 2byte
+function neisBytes(text) {
+  let bytes = 0;
+  for (const ch of String(text)) {
+    if (ch === "\r") continue;              // \r\n은 줄바꿈 한 번으로 센다
+    if (ch === "\n") { bytes += 2; continue; }
+    bytes += ch.charCodeAt(0) > 127 ? 3 : 1;
+  }
+  return bytes;
+}
+// 선택한 기준 바이트 (0이면 제한 없음)
+function countLimit() {
+  const sel = $("count-limit")?.value ?? "1500";
+  if (sel === "custom") return Math.max(0, Number($("count-limit-custom")?.value) || 0);
+  return Math.max(0, Number(sel) || 0);
+}
 function renderCharCount() {
+  const custom = $("count-limit-custom");
+  if (custom) custom.classList.toggle("hidden", $("count-limit")?.value !== "custom");
+
   const text = $("count-text").value;
   const box = $("count-result");
   if (!text) { box.innerHTML = ""; return; }
+
   const withSpace = [...text.replace(/\r?\n/g, "")].length;
   const noSpace = [...text.replace(/\s/g, "")].length;
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
   const pages = Math.ceil(withSpace / 200) || 0;
-  box.innerHTML = `
+  const bytes = neisBytes(text);
+  const limit = countLimit();
+
+  let head;
+  if (limit) {
+    const left = limit - bytes;
+    const pct = Math.min(100, Math.round((bytes / limit) * 100));
+    const over = left < 0;
+    head = `
+      <div class="count-row count-neis${over ? " is-over" : ""}">
+        <span>나이스 바이트</span>
+        <b>${bytes.toLocaleString()} / ${limit.toLocaleString()} byte</b>
+      </div>
+      <div class="count-bar"><span style="width:${pct}%" class="${over ? "is-over" : ""}"></span></div>
+      <div class="count-row count-left${over ? " is-over" : ""}">
+        <span>${over ? "초과" : "남은 분량"}</span>
+        <b>${Math.abs(left).toLocaleString()} byte</b>
+      </div>`;
+  } else {
+    head = `<div class="count-row count-neis"><span>나이스 바이트</span><b>${bytes.toLocaleString()} byte</b></div>`;
+  }
+
+  box.innerHTML = head + `
     <div class="count-row"><span>공백 포함</span><b>${withSpace.toLocaleString()}자</b></div>
     <div class="count-row"><span>공백 제외</span><b>${noSpace.toLocaleString()}자</b></div>
     <div class="count-row"><span>어절 수</span><b>${words.toLocaleString()}개</b></div>
@@ -4534,6 +4714,8 @@ function bindEventsNew() {
   $("chosung-reveal-btn")?.addEventListener("click", revealChosung);
   $("word-pick-btn")?.addEventListener("click", pickWord);
   $("count-text")?.addEventListener("input", renderCharCount);
+  $("count-limit")?.addEventListener("change", renderCharCount);
+  $("count-limit-custom")?.addEventListener("input", renderCharCount);
 
   // 출결 관리
   $("att-grade")?.addEventListener("change", () => {
