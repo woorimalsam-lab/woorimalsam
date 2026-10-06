@@ -1303,3 +1303,5 @@ body {
 body.guest #picker-grade, body.guest #picker-class,
 body.guest #group-grade, body.guest #group-class,
 body.guest #wheel-grade, body.guest #wheel-class { display: none; }
+.guest-roster-status { font-size: 0.8rem; margin: 0 0 8px; min-height: 1.2em; line-height: 1.5; }
+.guest-roster-status.is-error { color: var(--danger); }

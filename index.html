@@ -337,15 +337,18 @@
         </div>
         <p class="guest-desc muted">
           도구는 로그인 없이 누구나 쓸 수 있습니다. 로그인하면 일정·메모·학생 기록·출결·자리배치가 함께 열립니다.<br />
-          🔒 아래 명단은 <b>이 기기의 브라우저에만</b> 저장되며, 어디로도 전송되지 않습니다.
+          나이스 명렬표(.xlsx)를 그대로 올리면 <b>발표자 뽑기 · 모둠 편성 · 돌림판</b>에 바로 반영됩니다.<br />
+          🔒 올린 파일은 <b>이 브라우저 안에서만</b> 열리고, 명단은 <b>이 기기에만</b> 저장됩니다 — 어디로도 전송되지 않습니다.
         </p>
-        <textarea id="guest-roster" rows="3" class="tool-textarea"
-          placeholder="이름을 쉼표나 줄바꿈으로 구분해 입력하세요&#10;예: 김민준, 이서연, 박지호, 최수아&#10;(엑셀의 한 열을 그대로 복사해 붙여넣어도 됩니다)"></textarea>
         <div class="tool-row">
-          <button id="guest-roster-save" class="btn btn-primary btn-sm">명단 저장</button>
+          <input id="guest-roster-file" type="file" accept=".csv,.xlsx,.xls" hidden />
+          <button id="guest-roster-upload" class="btn btn-primary btn-sm">📁 명단 업로드 (.xlsx · .csv)</button>
           <button id="guest-roster-clear" class="btn btn-ghost btn-sm">지우기</button>
           <span id="guest-roster-count" class="muted"></span>
         </div>
+        <div id="guest-roster-status" class="guest-roster-status muted"></div>
+        <textarea id="guest-roster" rows="4" class="tool-textarea"
+          placeholder="파일을 올리거나, 여기에 직접 입력해도 됩니다 (입력하면 자동 저장)&#10;예: 김민준, 이서연, 박지호&#10;번호를 붙이려면: 1 김민준"></textarea>
         <p class="guest-unlock-hint muted">
           이 기기에 저장해 둔 내 자료를 로그인 없이 보려면
           <button id="guest-unlock" class="linklike">여기를 누르세요</button>.

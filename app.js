@@ -1581,8 +1581,9 @@ function bindEvents() {
   $("login-btn").addEventListener("click", login);
   $("guest-login-btn")?.addEventListener("click", login);
   $("guest-unlock")?.addEventListener("click", guestUnlock);
-  $("guest-roster")?.addEventListener("input", renderGuestRosterCount);
-  $("guest-roster-save")?.addEventListener("click", saveGuestRoster);
+  $("guest-roster")?.addEventListener("input", onGuestRosterInput);
+  $("guest-roster-upload")?.addEventListener("click", () => $("guest-roster-file")?.click());
+  $("guest-roster-file")?.addEventListener("change", (e) => uploadGuestRoster(e.target.files?.[0]));
   $("guest-roster-clear")?.addEventListener("click", clearGuestRoster);
   $("logout-btn").addEventListener("click", logout);
 
@@ -2294,8 +2295,9 @@ function cellStr(v) {
   return m ? m[1] : s;
 }
 
-function parseNEISData(data) {
-  if (!Array.isArray(data) || !data.length) return { success: false, msg: "파일이 비어있습니다" };
+// 명렬표 행들을 훑어 학생 목록만 돌려준다 (state를 건드리지 않음 → 게스트 업로드에서도 재사용)
+function scanRosterRows(data) {
+  if (!Array.isArray(data) || !data.length) return { ok: false, list: [], msg: "파일이 비어있습니다" };
 
   // 1) 헤더 행 탐색: 위에서 30행 안에서 '성명'/'이름' 칸이 있는 행 ("성 명"처럼 띄어쓰기 허용)
   let headerRow = -1;
@@ -2327,19 +2329,16 @@ function parseNEISData(data) {
     if (m) { fallbackGrade = m[1]; fallbackClass = m[2]; break; }
   }
 
-  let added = 0, skippedDup = 0;
-  const pushStudent = (name, klass, number, grade) => {
+  const list = [];
+  const add = (name, klass, number, grade) => {
     name = (name || "").trim();
     if (!name || /^\d+$/.test(name)) return;
-    klass = (klass || "").replace(/반$/, "");
-    number = (number || "").replace(/번$/, "");
-    grade = (grade || "").replace(/학년$/, "");
-    if (state.students.find((s) => s.name === name && s.class === klass && s.number === number)) {
-      skippedDup++;
-      return;
-    }
-    state.students.push({ id: uid(), name, grade, class: klass, number, notes: "", date: new Date().toISOString() });
-    added++;
+    list.push({
+      name,
+      class: (klass || "").replace(/반$/, ""),
+      number: (number || "").replace(/번$/, ""),
+      grade: (grade || "").replace(/학년$/, ""),
+    });
   };
 
   // 2.5) 헤더가 없으면 '사진명렬표' 형식 시도: "1번 강건" 같은 셀들이 흩어져 있음
@@ -2352,12 +2351,8 @@ function parseNEISData(data) {
       }
     }
     if (found.length >= 3) {
-      for (const f of found) pushStudent(f.name, fallbackClass, f.number, fallbackGrade);
-      saveStudents();
-      const dupMsg = skippedDup ? ` (중복 ${skippedDup}명 제외)` : "";
-      return added
-        ? { success: true, added, msg: `${added}명의 학생이 추가되었습니다${dupMsg}` }
-        : { success: true, added, msg: `추가된 학생이 없습니다${dupMsg} — 이미 모두 등록되어 있어요` };
+      for (const f of found) add(f.name, fallbackClass, f.number, fallbackGrade);
+      return { ok: true, list, msg: "" };
     }
   }
 
@@ -2380,7 +2375,30 @@ function parseNEISData(data) {
       grade = fallbackGrade;
     }
 
-    pushStudent(name, klass, number, grade);
+    add(name, klass, number, grade);
+  }
+
+  return list.length
+    ? { ok: true, list, msg: "" }
+    : { ok: false, list, msg: "학생 데이터를 찾지 못했습니다. 파일 형식을 확인해 주세요." };
+}
+
+// 명렬표 → 내 학생 목록에 추가 (로그인 사용자용)
+function parseNEISData(data) {
+  const scan = scanRosterRows(data);
+  if (!scan.ok) return { success: false, msg: scan.msg };
+
+  let added = 0, skippedDup = 0;
+  for (const s of scan.list) {
+    if (state.students.find((x) => x.name === s.name && x.class === s.class && x.number === s.number)) {
+      skippedDup++;
+      continue;
+    }
+    state.students.push({
+      id: uid(), name: s.name, grade: s.grade, class: s.class, number: s.number,
+      notes: "", date: new Date().toISOString(),
+    });
+    added++;
   }
 
   if (!added && !skippedDup) return { success: false, msg: "학생 데이터를 찾지 못했습니다. 파일 형식을 확인해 주세요." };
@@ -2389,6 +2407,31 @@ function parseNEISData(data) {
   return added
     ? { success: true, added, msg: `${added}명의 학생이 추가되었습니다${dupMsg}` }
     : { success: true, added, msg: `추가된 학생이 없습니다${dupMsg} — 이미 모두 등록되어 있어요` };
+}
+
+// 엑셀/CSV 파일 → 행 배열 (명렬표 업로드 공통)
+async function readRosterFile(file) {
+  const lower = file.name.toLowerCase();
+  const isExcel = lower.endsWith(".xlsx") || lower.endsWith(".xls");
+  if (isExcel) await ensureXLSX();   // CDN 실패 시 2차 소스에서 로드
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("파일을 읽지 못했습니다"));
+    reader.onload = (e) => {
+      try {
+        if (isExcel) {
+          const wb = XLSX.read(new Uint8Array(e.target.result), { type: "array" });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          resolve(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }));
+        } else {
+          const lines = String(e.target.result).split(/\r?\n/).filter((l) => l.trim());
+          resolve(lines.map((l) => l.split(",")));
+        }
+      } catch (err) { reject(err); }
+    };
+    if (isExcel) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
+  });
 }
 
 function parseNEISFile(content) {
@@ -3220,9 +3263,56 @@ function guestRosterNames() {
 }
 // toolStudents가 기대하는 모양({id, name, number, grade, class})으로 맞춰 준다
 function guestRosterStudents() {
-  return guestRosterNames().map((name, i) => ({
-    id: "g" + i, name, number: "", grade: "", class: "",
-  }));
+  return guestRosterNames().map((entry, i) => {
+    const m = /^(\d{1,3})\s*번?[.\s]\s*(.+)$/.exec(entry);   // "3 김하늘" / "3번 김하늘" / "3. 김하늘"
+    return m
+      ? { id: "g" + i, name: m[2].trim(), number: m[1], grade: "", class: "" }
+      : { id: "g" + i, name: entry, number: "", grade: "", class: "" };
+  });
+}
+
+// 명렬표 파일(.xlsx/.xls/.csv)을 올려 게스트 명단을 채운다.
+// 파일은 브라우저 안에서만 열리고, 결과도 이 기기 localStorage에만 남는다.
+async function uploadGuestRoster(file) {
+  if (!file) return;
+  const status = $("guest-roster-status");
+  const say = (msg, bad) => {
+    if (!status) { toast(msg); return; }
+    status.textContent = msg;
+    status.classList.toggle("is-error", !!bad);
+  };
+  say("파일을 읽는 중…");
+  try {
+    const rows = await readRosterFile(file);
+    const scan = scanRosterRows(rows);
+    if (!scan.ok) { say(scan.msg, true); return; }
+    // 같은 이름+번호는 한 번만
+    const seen = new Set();
+    const lines = [];
+    for (const s of scan.list) {
+      const key = `${s.number}|${s.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push(s.number ? `${s.number} ${s.name}` : s.name);
+    }
+    // 엉뚱한 파일이 기존 명단을 말없이 덮어쓰지 않도록 확인
+    const had = guestRosterNames().length;
+    if (had && !confirm(`현재 명단 ${had}명을 새로 읽은 ${lines.length}명으로 바꿀까요?`)) {
+      say("취소했습니다 — 명단은 그대로입니다");
+      return;
+    }
+    $("guest-roster").value = lines.join("\n");
+    saveLocal(LOCAL_GUEST_ROSTER_KEY, $("guest-roster").value);
+    renderGuestRosterCount();
+    renderToolClassSelects();
+    say(`✅ ${lines.length}명을 불러왔습니다 — 이 기기에만 저장됩니다`);
+  } catch (e) {
+    console.error(e);
+    say(e?.message || "파일을 읽지 못했습니다. .xlsx 또는 .csv인지 확인해 주세요.", true);
+  } finally {
+    const input = $("guest-roster-file");
+    if (input) input.value = "";   // 같은 파일을 다시 올릴 수 있게
+  }
 }
 function renderGuestRosterCount() {
   const el = $("guest-roster-count");
@@ -3235,11 +3325,17 @@ function loadGuestRoster() {
   if (typeof saved === "string" && $("guest-roster")) $("guest-roster").value = saved;
   renderGuestRosterCount();
 }
+let guestRosterTimer = null;
+// 직접 입력은 따로 저장 버튼 없이 자동 저장한다
 function saveGuestRoster() {
   saveLocal(LOCAL_GUEST_ROSTER_KEY, $("guest-roster")?.value || "");
   renderGuestRosterCount();
   renderToolClassSelects();
-  toast(`💾 명단 ${guestRosterNames().length}명 저장 (이 기기에만)`);
+}
+function onGuestRosterInput() {
+  renderGuestRosterCount();
+  clearTimeout(guestRosterTimer);
+  guestRosterTimer = setTimeout(saveGuestRoster, 600);
 }
 function clearGuestRoster() {
   if (!confirm("명단을 지울까요?")) return;
@@ -3247,6 +3343,8 @@ function clearGuestRoster() {
   saveLocal(LOCAL_GUEST_ROSTER_KEY, "");
   renderGuestRosterCount();
   renderToolClassSelects();
+  const status = $("guest-roster-status");
+  if (status) { status.textContent = ""; status.classList.remove("is-error"); }
 }
 // 로그인이 막혔을 때를 위한 탈출구 (이 기기 localStorage 자료 보기)
 function guestUnlock() {
