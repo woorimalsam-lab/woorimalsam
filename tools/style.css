@@ -1,4 +1,37 @@
+/* ============================================================
+   강원교육체 (강원특별자치도교육청 배포 무료 글꼴)
+   TTF 19MB → WOFF2 1.0MB 로 변환해 사용. 한글 11,172자 전부 포함.
+   ============================================================ */
+@font-face {
+  font-family: "GangwonEduAll";
+  src: url("../fonts/gangwon-all-light.woff2") format("woff2");
+  font-weight: 300 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "GangwonEduAll";
+  src: url("../fonts/gangwon-all-bold.woff2") format("woff2");
+  font-weight: 600 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "GangwonEduPower";
+  src: url("../fonts/gangwon-power.woff2") format("woff2");
+  font-weight: 400 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "GangwonEduHyeonok";
+  src: url("../fonts/gangwon-hyeonok.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+}
+
 :root {
+  /* 본문·UI / 큰 숫자·결과 / 손글씨 포인트 */
+  --font-ui: "GangwonEduAll", "Pretendard", -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  --font-display: "GangwonEduPower", "GangwonEduAll", "Pretendard", -apple-system, sans-serif;
+  --font-hand: "GangwonEduHyeonok", "GangwonEduAll", "Pretendard", -apple-system, sans-serif;
   --bg: #f4f6fb;
   --panel: #ffffff;
   --ink: #1f2430;
@@ -19,7 +52,7 @@
 
 body {
   margin: 0;
-  font-family: "Pretendard", -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  font-family: var(--font-ui);
   background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
@@ -1330,3 +1363,52 @@ body {
 .count-bar span { display: block; height: 100%; background: var(--primary); transition: width 0.15s ease; }
 .count-bar span.is-over { background: var(--danger); }
 .site-credit { margin-top: 10px; font-size: 0.82rem; font-weight: 600; color: var(--muted); letter-spacing: 0.01em; }
+
+
+/* ---------- 강원교육체 역할 배분 ---------- */
+/* 큰 숫자·결과는 '튼튼' — 교실 뒤에서도 읽히도록 */
+.timer-display,
+.stopwatch-display,
+.numberpick-result,
+.debate-timer,
+.clock-time,
+.picker-name,
+.quiz-word,
+.wheel-result,
+.count-neis b,
+.count-left b {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+/* 숫자가 흔들리지 않게 */
+.timer-display, .stopwatch-display, .debate-timer, .clock-time, .numberpick-result {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 제목·강조는 '모두 Bold' */
+.brand,
+.panel-head h2,
+.tool-card h3,
+.guest-head h2,
+.group-box-head,
+.debate-stage-label,
+.btn {
+  font-family: var(--font-ui);
+  font-weight: 700;
+}
+
+/* 손글씨 포인트 — '현옥샘' */
+.signal-label,
+.site-credit,
+.seating-board,
+.group-caption {
+  font-family: var(--font-hand);
+}
+.signal-label { font-size: 1.05rem; font-weight: 700; }
+.site-credit { font-size: 0.95rem; font-weight: 700; }
+
+/* 라이트 본문이 얇아 보이지 않도록 살짝 보정 */
+body { -webkit-font-smoothing: antialiased; }
+.tool-textarea, .picker-result { line-height: 1.6; }
+.site-fontnote { margin-top: 4px; font-size: 0.74rem; color: var(--muted); }
