@@ -1463,3 +1463,47 @@ body { font-weight: 500; }
   .clock-time { font-size: 2.7rem; }
   .picker-name { font-size: 1.8rem; }
 }
+
+/* ============================================================
+   한 단계 더 — 전체 기준 크기를 키우고, 제목·버튼은 가장 두꺼운 '튼튼'으로
+   (모두 Bold가 이 가족의 최대 굵기라, 더 진하게 하려면 활자를 바꿔야 한다)
+   ============================================================ */
+html { font-size: 17.5px; }
+
+.brand,
+.panel-head h2,
+.tool-card h3,
+.group-box-head,
+.btn,
+.roster-chip,
+.seating-seat,
+.vote-option-text,
+.picker-history-head {
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+/* 튼튼은 폭이 넓어 자간을 살짝 좁힌다 */
+.brand, .panel-head h2, .tool-card h3, .btn { letter-spacing: -0.01em; }
+
+/* 큰 숫자·결과 한 번 더 */
+.timer-display, .stopwatch-display, .numberpick-result { font-size: 3.1rem; }
+.debate-timer { font-size: 4rem; }
+.clock-time { font-size: 3.5rem; }
+.picker-name { font-size: 2.3rem; }
+.quiz-word { font-size: 2.5rem; }
+
+/* 본문·안내문도 한 단계 */
+.site-intro { font-size: 0.95rem; }
+.guest-desc, .roster-status, .rec-info { font-size: 0.9rem; }
+.muted { font-size: 0.9rem; }
+.group-member { font-size: 1rem; }
+.tool-textarea { font-size: 0.98rem; }
+
+@media (max-width: 640px) {
+  html { font-size: 16.5px; }
+  .timer-display, .stopwatch-display, .numberpick-result { font-size: 2.5rem; }
+  .debate-timer { font-size: 3.1rem; }
+  .clock-time { font-size: 2.8rem; }
+  .picker-name { font-size: 1.9rem; }
+}
