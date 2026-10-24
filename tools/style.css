@@ -5,13 +5,13 @@
 @font-face {
   font-family: "GangwonEduAll";
   src: url("../fonts/gangwon-all-light.woff2") format("woff2");
-  font-weight: 300 500;
+  font-weight: 100 350;
   font-display: swap;
 }
 @font-face {
   font-family: "GangwonEduAll";
   src: url("../fonts/gangwon-all-bold.woff2") format("woff2");
-  font-weight: 600 900;
+  font-weight: 351 900;
   font-display: swap;
 }
 @font-face {
@@ -35,7 +35,7 @@
   --bg: #f4f6fb;
   --panel: #ffffff;
   --ink: #1f2430;
-  --muted: #7a8194;
+  --muted: #5d6578;
   --line: #e6e9f0;
   --primary: #3b6ef5;
   --primary-ink: #ffffff;
@@ -620,7 +620,7 @@ body {
   --bg: #12151c;
   --panel: #1b1f28;
   --ink: #e6e8ee;
-  --muted: #9aa1b0;
+  --muted: #aeb5c4;
   --line: #2b303c;
   --accent-soft: #232a3a;
   --today: #35301c;
@@ -1412,3 +1412,54 @@ body {
 body { -webkit-font-smoothing: antialiased; }
 .tool-textarea, .picker-result { line-height: 1.6; }
 .site-fontnote { margin-top: 4px; font-size: 0.74rem; color: var(--muted); }
+
+
+/* ============================================================
+   읽기 쉽게 — 본문도 Bold 활자로, 원래 굵던 글씨는 한 단계 크게
+   (강원교육모두는 Light/Bold 두 종뿐이라 굵기 경계를 350으로 내려
+    기본 글씨 500이 Bold 활자를 쓰도록 했다)
+   ============================================================ */
+body { font-weight: 500; }
+.muted { font-weight: 500; }
+
+/* 제목·브랜드 */
+.brand { font-size: 1.24rem; }
+.panel-head h2 { font-size: 1.18rem; }
+.tool-card h3 { font-size: 1.14rem; margin-bottom: 14px; }
+
+/* 버튼 */
+.btn { font-size: 0.98rem; font-weight: 700; }
+.btn-sm { font-size: 0.9rem; padding: 7px 13px; }
+.btn-icon { font-size: 1.4rem; }
+
+/* 큰 숫자·결과 — 교실 뒤에서도 읽히게 한 단계 더 */
+.timer-display, .stopwatch-display, .numberpick-result { font-size: 2.9rem; }
+.debate-timer { font-size: 3.8rem; }
+.clock-time { font-size: 3.3rem; }
+.picker-name { font-size: 2.1rem; }
+.quiz-word { font-size: 2.3rem; }
+.wheel-result { font-size: 1.2rem; font-weight: 700; }
+
+/* 명단·모둠 */
+.group-box-head { font-size: 1rem; }
+.group-member { font-size: 0.95rem; padding: 3px 0; }
+.roster-chip { font-size: 0.9rem; font-weight: 700; }
+.picker-history-list { font-size: 0.92rem; }
+.seating-seat { font-weight: 700; }
+
+/* 손글씨 포인트 */
+.signal-label { font-size: 1.22rem; }
+.site-credit { font-size: 1.1rem; }
+
+/* 작은 안내문도 또렷하게 */
+.site-intro { font-size: 0.9rem; }
+.guest-desc, .roster-status, .rec-info { font-size: 0.86rem; }
+.tool-check { font-size: 0.88rem; }
+.count-row { font-size: 0.95rem; }
+
+@media (max-width: 640px) {
+  .timer-display, .stopwatch-display, .numberpick-result { font-size: 2.4rem; }
+  .debate-timer { font-size: 3rem; }
+  .clock-time { font-size: 2.7rem; }
+  .picker-name { font-size: 1.8rem; }
+}
