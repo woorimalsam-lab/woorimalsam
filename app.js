@@ -3665,9 +3665,10 @@ function saveAttendance() {
 }
 
 // ---- 학급 게시판 공유 ----------------------------------------
-// 켜두면 출결 저장 시 Firestore(classboard/attendance)에 자동 발행되어
-// 학급 게시판(https://woorimalsam-lab.github.io/classroom/)에 표시됩니다.
-// 학생 개인정보 보호를 위해 비고(n)는 공유하지 않습니다.
+// 켜두면 출결 저장 시 Firestore 우리 반 전용 공간(classboard_class/{학급코드}_attendance)에
+// 자동 발행되어 학급 게시판(https://woorimalsam-lab.github.io/classroom/)에 표시됩니다.
+// 학급 코드는 교사 전용 문서(classboard_teacher/settings)에 있고, 학급 링크를 받은 학생만 압니다.
+// 학생 개인정보 보호를 위해 비고(n)는 공유하지 않고 이름은 가려서(김*수) 보냅니다.
 const LOCAL_ATT_SHARE_KEY = "myplanner.attShare";
 let attShare = false;
 let attPublishTimer = null;
@@ -3703,6 +3704,24 @@ function schedulePublishAttendance() {
   clearTimeout(attPublishTimer);
   attPublishTimer = setTimeout(publishAttendance, 1500);
 }
+// 학급 게시판과 같은 규칙: 김민수 → 김*수, 이수 → 이*, 남궁민수 → 남**수
+function maskName(name) {
+  const ch = Array.from(String(name ?? "").trim());
+  if (ch.length <= 1) return ch.join("");
+  if (ch.length === 2) return `${ch[0]}*`;
+  return ch[0] + "*".repeat(ch.length - 2) + ch[ch.length - 1];
+}
+// 학급 코드는 게시판에서 '새 링크로 바꾸기'를 하면 바뀌므로 발행할 때마다 새로 읽음
+async function getClassKey() {
+  const { doc, getDoc, setDoc } = fb.fs;
+  const ref = doc(fb.db, "classboard_teacher", "settings");
+  const snap = await getDoc(ref);
+  if (snap.exists() && snap.data().classKey) return snap.data().classKey;
+  const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const key = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => abc[b & 63]).join("");
+  await setDoc(ref, { classKey: key, createdAt: new Date().toISOString() }, { merge: true });
+  return key;
+}
 async function publishAttendance() {
   if (!fb || !state.user) return;
   try {
@@ -3714,7 +3733,7 @@ async function publishAttendance() {
           .filter(([, r]) => r.s && r.s !== "출석")   // 지각·조퇴·결석만 공유 (비고만 있는 학생 제외)
           .map(([sid, r]) => ({
             no: Number(byId[sid]?.number) || 0,
-            name: byId[sid]?.name || "(명단 외)",
+            name: byId[sid]?.name ? maskName(byId[sid].name) : "(명단 외)",
             s: r.s,
             label: attLabel(r),
           }));
@@ -3722,7 +3741,8 @@ async function publishAttendance() {
       }
     }
     const { doc, setDoc } = fb.fs;
-    await setDoc(doc(fb.db, "classboard", "attendance"), {
+    const key = await getClassKey();
+    await setDoc(doc(fb.db, "classboard_class", `${key}_attendance`), {
       updatedAt: new Date().toISOString(),
       days,
     });
